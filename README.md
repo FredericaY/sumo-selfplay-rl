@@ -1,125 +1,102 @@
-# Sumo Self-Play RL (Unity ML-Agents)
+# DeepRL Self-Play Arena
 
-A Unity-based multi-agent reinforcement learning project that studies training stability in competitive self-play using opponent pool mechanisms.
+DeepRL Self-Play Arena is a solo deep reinforcement learning course project focused on building a small 1v1 self-play environment and presenting the final result in Unity.
 
----
+The core scenario is a toy sumo-style duel. Two agents compete in a circular arena and try to push each other out using only a small action set:
 
-## 🧠 Overview
+- Move in a chosen direction with short cooldown
+- Push or dash in a chosen direction with longer cooldown
 
-This project investigates how to stabilize training in competitive multi-agent reinforcement learning (MARL) environments.
+This project intentionally keeps the environment simple so the main challenge becomes competitive learning, self-play stability, reward design, and opponent diversity.
 
-In standard self-play, agents continuously train against their latest versions, which introduces a highly non-stationary opponent distribution. This often leads to:
+## Why Self-Play
 
-- Policy oscillation  
-- Training instability  
-- Overfitting to recent opponents  
+Self-play is a natural fit for a symmetric 1v1 game:
 
-To address this, we propose an **opponent pool mechanism**, where agents train against a diverse set of previously saved policies instead of only the latest one.
+- It removes the need to hand-design a strong scripted opponent first
+- It allows the agent to continually face stronger policies over time
+- It makes it easier to study instability, cycling behavior, and opponent-pool ideas
 
----
+The longer-term research direction for this repo is to compare baseline latest-policy self-play against simple opponent-pool variants.
 
-## 🎮 Environment
+## Why Unity
 
-We design a minimal 1v1 physics-based "sumo-style" environment in Unity:
+Unity is used for the final demo and gameplay-facing side of the project:
 
-- Two agents compete in a bounded arena  
-- Objective: push the opponent out of the arena  
+- Fast iteration on arena layout, collisions, feel, and presentation
+- Clear visualization for the final course presentation
+- Easy path from training environment ideas to a playable prototype
 
-### Actions
+The training code is kept on the Python side so experiments remain easy to run, log, compare, and extend.
 
-Each agent has two core actions:
+## Planned Milestones
 
-- **Move**: short-range movement (low cooldown)  
-- **Push**: long-range movement with stronger force (high cooldown)  
+1. Finalize environment rules, observations, and reward design
+2. Build a minimal playable Unity prototype for the arena loop
+3. Implement a simple Python training scaffold and baseline policy loop
+4. Run first baseline experiments with random or scripted opponents
+5. Add PPO self-play and checkpoint evaluation
+6. Add opponent-pool experiments and compare stability
+7. Export a trained policy and connect the final demo flow in Unity
 
-This setup creates a simple yet expressive competitive environment that supports strategic behavior such as positioning, timing, and aggression.
+## Repository Structure
 
----
-
-## 🤖 Method
-
-We use **PPO (Proximal Policy Optimization)** with self-play in Unity ML-Agents.
-
-### Baseline
-
-- Standard self-play  
-- Agent always plays against the latest policy  
-
-### Our Approach: Opponent Pool
-
-We maintain a pool of historical policies:
-
-- Periodically save checkpoints  
-- Sample opponents from the pool during training  
-
-We explore multiple sampling strategies:
-
-- Latest-only (baseline)
-- Uniform sampling
-- Recency-biased sampling
-
----
-
-## 📊 Evaluation
-
-We evaluate performance using:
-
-- Win rate against historical checkpoints  
-- Training stability (reward curves)  
-- Generalization under environment variations  
-
-We also analyze how opponent diversity affects convergence behavior.
-
----
-
-## 🧪 Project Structure
-
-```
+```text
 sumo-selfplay-rl/
-├── UnityEnv/          # Unity project (ML-Agents environment)
-├── training/          # Training scripts and configs
-├── models/            # Saved checkpoints
-├── results/           # Logs, plots, evaluation results
-└── README.md
+├─ README.md
+├─ .gitignore
+├─ docs/
+│  ├─ DeepRL_final_proposal.pdf
+│  ├─ design/
+│  │  ├─ game_design.md
+│  │  ├─ env_spec.md
+│  │  ├─ reward_design.md
+│  │  └─ experiment_plan.md
+│  ├─ meetings/
+│  ├─ paper_notes/
+│  └─ proposal/
+├─ unity/
+│  ├─ README.md
+│  ├─ project_structure.md
+│  ├─ scripts_plan.md
+│  └─ SelfPlaySumoArena/
+├─ python/
+│  ├─ README.md
+│  ├─ requirements.txt
+│  ├─ pyproject.toml
+│  ├─ configs/
+│  │  └─ train.yaml
+│  ├─ src/
+│  │  ├─ agents/
+│  │  ├─ algorithms/
+│  │  ├─ envs/
+│  │  ├─ eval/
+│  │  └─ train.py
+│  ├─ scripts/
+│  │  ├─ train_selfplay.py
+│  │  └─ eval_checkpoint.py
+│  ├─ checkpoints/
+│  ├─ logs/
+│  └─ videos/
+├─ experiments/
+├─ models/
+└─ tools/
 ```
 
----
+## Current Status
 
-## 🚀 Setup
+- A Unity project already exists in `unity/SelfPlaySumoArena`
+- The repository has now been initialized with documentation and Python training skeletons
+- Most files contain TODO markers instead of full implementations on purpose
 
-### Requirements
+## Next Steps
 
-- Unity (2022 LTS recommended)
-- ML-Agents Toolkit
-- Python 3.10+
-- PyTorch
+- Use the proposal PDF in `docs/` to refine the environment specification
+- Decide whether the Python training loop will first use a toy local simulator or connect directly to Unity
+- Implement the first playable duel prototype in Unity
+- Add the first baseline experiment under `experiments/`
 
-### Training
+## Author
 
-```bash
-mlagents-learn config/ppo.yaml --run-id=sumo_selfplay
-```
-
----
-
-## 🎥 Demo (Coming Soon)
-
-- Self-play training progression  
-- Agent behaviors and strategies  
-- Comparison between baseline and opponent pool  
-
----
-
-## 📚 References
-
-- AlphaGo Zero (Silver et al., 2017)  
-- OpenAI Five (OpenAI, 2019)  
-- Emergent Complexity via Multi-Agent Competition (Bansal et al., 2018)  
-
----
-
-## 👤 Author
-
-**Julie Yang**
-
-This project is developed independently as part of a Deep Reinforcement Learning course project, with the goal of building a research-oriented and portfolio-ready system.
+Julie Yang  
+Deep reinforcement learning course project

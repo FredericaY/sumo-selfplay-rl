@@ -1,0 +1,5 @@
+﻿numpy>=1.26
+pyyaml>=6.0
+torch>=2.2
+
+# TODO: Add PPO or experiment tracking dependencies only when needed.

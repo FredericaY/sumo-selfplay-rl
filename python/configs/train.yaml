@@ -1,0 +1,25 @@
+﻿experiment_name: exp002_selfplay_ppo
+seed: 42
+
+env:
+  name: SelfPlayArena
+  arena_radius: 5.0
+  max_steps: 500
+  observation_mode: compact
+  action_mode: hybrid
+
+training:
+  total_timesteps: 10000
+  eval_interval: 1000
+  checkpoint_interval: 2000
+
+selfplay:
+  enabled: true
+  opponent_sampling: latest
+  opponent_pool_size: 8
+
+logging:
+  log_dir: ../logs
+  checkpoint_dir: ../checkpoints
+
+# TODO: Add PPO hyperparameters once the algorithm implementation starts.
