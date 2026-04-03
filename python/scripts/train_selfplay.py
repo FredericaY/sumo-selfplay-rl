@@ -1,4 +1,4 @@
-﻿"""Convenience script for launching self-play training from the command line."""
+"""Convenience script for launching self-play training from the command line."""
 
 from __future__ import annotations
 
@@ -25,11 +25,17 @@ def parse_args() -> argparse.Namespace:
         default=str(ROOT / "configs" / "train.yaml"),
         help="Path to the training config file.",
     )
+    parser.add_argument(
+        "--step-sleep",
+        type=float,
+        default=None,
+        help="Optional wall-clock sleep in seconds after each environment step for easier visual debugging.",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    main(args.config)
+    main(args.config, step_sleep_override=args.step_sleep)
 
     # TODO: Add run naming, seeding, and experiment folder creation.

@@ -1,25 +1,33 @@
-﻿experiment_name: exp002_selfplay_ppo
+experiment_name: exp002_selfplay_ppo
 seed: 42
 
 env:
-  name: SelfPlayArena
-  arena_radius: 5.0
-  max_steps: 500
-  observation_mode: compact
-  action_mode: hybrid
+  host: 127.0.0.1
+  port: 5055
+  max_episode_steps: 400
 
 training:
-  total_timesteps: 10000
-  eval_interval: 1000
-  checkpoint_interval: 2000
+  total_updates: 10
+  steps_per_update: 256
+  train_epochs: 4
+  minibatch_size: 64
+  learning_rate: 0.0003
+  clip_ratio: 0.2
+  value_coef: 0.5
+  entropy_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  debug_every: 0
+  step_sleep_s: 0.0
+  train_mode: shared_selfplay
 
 selfplay:
   enabled: true
   opponent_sampling: latest
   opponent_pool_size: 8
+  opponent_policy: flee
 
 logging:
-  log_dir: ../logs
-  checkpoint_dir: ../checkpoints
+  checkpoint_dir: python/checkpoints/ppo
 
-# TODO: Add PPO hyperparameters once the algorithm implementation starts.
+# TODO: Add true checkpoint pools and opponent sampling once shared self-play stabilizes.

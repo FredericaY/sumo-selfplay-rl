@@ -1,9 +1,4 @@
-﻿"""Simple self-play manager placeholder.
-
-This module is responsible for opponent checkpoint tracking and sampling
-strategy selection. The current version only stores configuration and leaves
-the actual logic for later.
-"""
+"""Simple self-play manager placeholder."""
 
 from __future__ import annotations
 
@@ -18,6 +13,7 @@ class SelfPlayConfig:
     enabled: bool = True
     opponent_sampling: str = "latest"
     opponent_pool_size: int = 8
+    opponent_policy: str = "flee"
 
 
 class SelfPlayManager:
@@ -50,5 +46,6 @@ class SelfPlayManager:
 
         return (
             f"enabled={self.config.enabled}, sampling={self.config.opponent_sampling}, "
-            f"pool_size={self.config.opponent_pool_size}"
+            f"pool_size={self.config.opponent_pool_size}, "
+            f"opponent_policy={self.config.opponent_policy}"
         )
