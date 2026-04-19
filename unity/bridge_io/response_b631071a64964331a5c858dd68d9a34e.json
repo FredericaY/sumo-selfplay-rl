@@ -1,1 +1,21 @@
-{"request_id":"b631071a64964331a5c858dd68d9a34e","status":"step","done":false,"winner":-1,"reward0":0.0,"reward1":0.0,"agent0":{"selfPosition":{"x":1.8464471101760865,"y":0.0},"selfVelocity":{"x":1.2616767883300782,"y":0.0},"opponentPosition":{"x":2.6414082050323488,"y":0.0},"opponentVelocity":{"x":1.2616767883300782,"y":0.0},"pushReady":false},"agent1":{"selfPosition":{"x":2.6414082050323488,"y":0.0},"selfVelocity":{"x":1.2616767883300782,"y":0.0},"opponentPosition":{"x":1.8464471101760865,"y":0.0},"opponentVelocity":{"x":1.2616767883300782,"y":0.0},"pushReady":true}}
+{
+    "request_id":"b631071a64964331a5c858dd68d9a34e",
+    "status":"step",
+    "done":false,
+    "winner":-1,
+    "reward0":0.0,
+    "reward1":0.0,
+    "agent0":
+    {"selfPosition":{"x":1.8464471101760865,"y":0.0},
+    "selfVelocity":{"x":1.2616767883300782,"y":0.0},
+    "opponentPosition":{"x":2.6414082050323488,"y":0.0},
+    "opponentVelocity":{"x":1.2616767883300782,"y":0.0},
+    "pushReady":false
+    },
+    "agent1":{"selfPosition":{"x":2.6414082050323488,"y":0.0},
+    "selfVelocity":{"x":1.2616767883300782,"y":0.0},
+    "opponentPosition":{"x":1.8464471101760865,"y":0.0},
+    "opponentVelocity":{"x":1.2616767883300782,"y":0.0},
+    "pushReady":true
+    }
+}

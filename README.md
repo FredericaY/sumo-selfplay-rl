@@ -32,6 +32,11 @@ Implemented and verified:
 - Multi-episode evaluation utilities
 - PPO baseline training loop
 - Alternating two-policy PPO training
+- Segment-finish draining before A/B side switching
+- Opponent-pool sampling for alternating self-play
+- Periodic policy mutation for added diversity
+- EMA propagation between policy A and B
+- Time-scaled loss penalties and timeout center-bias rewards
 - Human-vs-policy realtime demo mode
 
 This means the current codebase already supports:
@@ -39,7 +44,7 @@ This means the current codebase already supports:
 - collecting trajectories from Unity
 - training a small neural policy in Python
 - evaluating checkpoints back inside the Unity environment
-- running early PPO/self-play experiments
+- running alternating self-play experiments with reward shaping, pool sampling, and mutation
 
 ## Why Self-Play
 
@@ -70,6 +75,7 @@ The current training-side workflow is:
 3. `UnitySelfPlayArenaEnv` exposes a training-friendly interface
 4. Policies consume observation vectors and output action vectors
 5. Rollouts can be collected, saved, trained on, and evaluated
+6. PPO supports alternating two-policy self-play, opponent-pool sampling, mutation, and optional EMA propagation
 
 Current observation vector size:
 
@@ -81,6 +87,18 @@ Current action vector size:
 - `move_x`
 - `move_y`
 - `use_push`
+
+Current self-play features:
+
+- alternating two-policy training (`policy_a` / `policy_b`)
+- batched multi-arena PPO collection
+- opponent pool sampling from historical checkpoints
+- periodic mutation of one training side
+- optional EMA propagation between A and B
+- left-right observation canonicalization
+- opponent/relative-position feature scaling
+- time-scaled terminal loss penalties
+- timeout center-bias penalties
 
 ## Quick Start
 
@@ -130,6 +148,7 @@ If you are using the 4-arena batch setup, also make sure:
 
 - `ArenaBatchManager` is assigned on `TcpBridge`
 - each arena instance has its own `ArenaMatchController`
+- all batch arenas use manual physics simulation
 
 ### Start training
 
@@ -170,8 +189,10 @@ The most frequently adjusted fields are:
 - `env.edge_safety_weight`
 - `env.outward_pressure_weight`
 - `env.terminal_timeout_penalty`
+- `env.timeout_center_bias_weight`
 - `env.terminal_loss_penalty`
 - `env.terminal_loss_time_scale`
+- `env.canonicalize_left_right`
 - `env.opponent_position_scale`
 - `env.relative_position_scale`
 - `training.total_updates`
@@ -179,8 +200,24 @@ The most frequently adjusted fields are:
 - `training.learning_rate`
 - `training.entropy_coef`
 - `training.finish_active_episodes_before_exit`
+- `training.mutation_enabled`
+- `training.mutation_every_segments`
+- `training.mutation_std`
 - `training.ema_propagation_enabled`
 - `training.ema_propagation_decay`
+- `selfplay.opponent_sampling`
+- `selfplay.opponent_pool_size`
+
+### Current self-play logic
+
+The current PPO path is not a single shared policy anymore. It uses alternating two-policy training:
+
+- `policy_a` trains while `policy_b` is frozen
+- then `policy_b` trains while `policy_a` is frozen
+- active episodes are drained before a segment exits when `finish_active_episodes_before_exit=true`
+- optional EMA can softly propagate weights from the newly trained side into the opposite side
+- optional mutation can perturb the side about to train every `mutation_every_segments`
+- optional opponent-pool sampling can replace the frozen opponent side with a historical checkpoint sample
 
 ## Main Workflow 2: Human vs Policy
 
@@ -208,6 +245,13 @@ For the human-controlled arena, set it up like this:
 - `Auto Simulate Bridge Steps = false`
 
 Human-vs-policy is a realtime mode. It should not use the step-driven training setting with manual physics simulation enabled.
+
+If you are coming from the batched training scene, also make sure:
+
+- `ArenaBatchManager` is disabled for human-vs-policy mode
+- or use a separate single-arena scene for demo / presentation
+
+Otherwise `ArenaBatchManager` can force global 2D physics into `Script` mode, which prevents normal realtime motion.
 
 ### Play against the latest policy
 
@@ -294,6 +338,7 @@ Training and rollout utilities:
 Key Python modules:
 
 - `python/src/envs/self_play_arena_env.py`
+- `python/src/envs/vec_self_play_arena_env.py`
 - `python/src/envs/observation_adapter.py`
 - `python/src/envs/action_adapter.py`
 - `python/src/agents/policy.py`
@@ -305,16 +350,17 @@ Key Python modules:
 ## Current Limitations
 
 - The PPO implementation is still an early experiment framework rather than a polished benchmark suite
-- Self-play currently focuses on alternating two-policy training and does not yet include a full opponent pool / league setup
+- Self-play now includes opponent-pool sampling and mutation, but not a full league / population training system
 - Reward shaping and reward attribution are still under active iteration
+- Learned policies can still be brittle against humans despite the richer training setup
 - Unity presentation polish is still behind the core training/debugging functionality
 
 ## Next Milestones
 
 - stabilize alternating two-policy PPO training
-- improve reward design and symmetry handling
-- compare trained checkpoints against stronger baselines
-- add checkpoint pool / opponent sampling variants if time allows
+- improve reward design, timeout handling, and symmetry robustness
+- compare trained checkpoints against stronger baselines and human play
+- refine pool / mutation / EMA settings with cleaner ablations
 - finalize a stronger policy for the Unity demo flow
 
 ## Author

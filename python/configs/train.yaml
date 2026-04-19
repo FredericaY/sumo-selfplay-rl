@@ -1,5 +1,5 @@
 experiment_name: exp002_selfplay_ppo
-seed: 167
+seed: 67
 
 env:
   host: 127.0.0.1
@@ -11,7 +11,7 @@ env:
   edge_safety_weight: 0.02
   outward_pressure_weight: 0.02
   terminal_timeout_penalty: 0
-  timeout_center_bias_weight: 0.2
+  timeout_center_bias_weight: 0.05
   terminal_win_reward: 1.0
   terminal_loss_penalty: 1.0
   terminal_loss_time_scale: 0.5
@@ -37,9 +37,9 @@ training:
   init_checkpoint:
   load_optimizer_state: false
   finish_active_episodes_before_exit: true
-  mutation_enabled: true
+  mutation_enabled: false
   mutation_every_segments: 4
-  mutation_std: 0.02
+  mutation_std: 0.01
   ema_propagation_enabled: true
   ema_propagation_decay: 0.95
 
