@@ -18,12 +18,14 @@ except ModuleNotFoundError as exc:
 else:
     TORCH_IMPORT_ERROR = None
 
+from envs.observation_adapter import DEFAULT_OBS_DIM
+
 
 @dataclass
 class ActorCriticConfig:
     """Network settings for the first PPO policy."""
 
-    obs_dim: int = 13
+    obs_dim: int = DEFAULT_OBS_DIM
     hidden_sizes: Sequence[int] = (64, 64)
     init_std: float = 0.4
 

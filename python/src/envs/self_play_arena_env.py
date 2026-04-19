@@ -40,6 +40,10 @@ class UnitySelfPlayArenaConfig:
     edge_safety_weight: float = 0.0
     outward_pressure_weight: float = 0.0
     terminal_timeout_penalty: float = 0.0
+    timeout_center_bias_weight: float = 0.0
+    terminal_win_reward: float = 1.0
+    terminal_loss_penalty: float = 1.5
+    terminal_loss_time_scale: float = 0.5
 
 
 class UnitySelfPlayArenaEnv:
@@ -91,6 +95,15 @@ class UnitySelfPlayArenaEnv:
             done = True
 
         terminal_reason = state.get("terminalReason", "running")
+        base_rewards = self._apply_terminal_reward_override(
+            base_rewards=base_rewards,
+            winner=int(state["winner"]),
+            done=done,
+            unity_done=bool(state["done"]),
+            python_timeout=python_timeout,
+            terminal_reason=terminal_reason,
+            episode_progress=min(1.0, self.episode_step / max(self.config.max_episode_steps, 1)),
+        )
         shaped_bonus = self._compute_shaped_bonus(
             previous_observations=previous_observations,
             current_observations=observations,
@@ -166,6 +179,41 @@ class UnitySelfPlayArenaEnv:
             "agent_1": float(state["reward1"]),
         }
 
+    def _apply_terminal_reward_override(
+        self,
+        base_rewards: RewardDict,
+        winner: int,
+        done: bool,
+        unity_done: bool,
+        python_timeout: bool,
+        terminal_reason: str,
+        episode_progress: float,
+    ) -> RewardDict:
+        if not done:
+            return base_rewards
+
+        scaled_loss_penalty = self._scaled_loss_penalty(episode_progress)
+
+        if winner == 0:
+            return {
+                "agent_0": self.config.terminal_win_reward,
+                "agent_1": -scaled_loss_penalty,
+            }
+
+        if winner == 1:
+            return {
+                "agent_0": -scaled_loss_penalty,
+                "agent_1": self.config.terminal_win_reward,
+            }
+
+        if self.config.timeout_center_bias_weight > 0.0:
+            return self._timeout_center_biased_rewards()
+
+        return {
+            "agent_0": -self.config.terminal_timeout_penalty,
+            "agent_1": -self.config.terminal_timeout_penalty,
+        }
+
     def _compute_shaped_bonus(
         self,
         previous_observations: JointObservation | None,
@@ -191,10 +239,6 @@ class UnitySelfPlayArenaEnv:
             bonus[agent_id] += self.config.outward_pressure_weight * opp_edge_ratio
             bonus[agent_id] -= self.config.edge_safety_weight * own_edge_ratio
 
-        if timeout and self.config.terminal_timeout_penalty != 0.0:
-            bonus["agent_0"] -= self.config.terminal_timeout_penalty
-            bonus["agent_1"] -= self.config.terminal_timeout_penalty
-
         if previous_observations is not None:
             for agent_id, opponent_id in (("agent_0", "agent_1"), ("agent_1", "agent_0")):
                 prev_opp = self._distance_to_center(previous_observations[opponent_id])
@@ -211,6 +255,31 @@ class UnitySelfPlayArenaEnv:
     def _distance_to_center(agent_obs: AgentObservation) -> float:
         pos = agent_obs["selfPosition"]
         return math.sqrt(pos["x"] * pos["x"] + pos["y"] * pos["y"])
+
+    def _scaled_loss_penalty(self, episode_progress: float) -> float:
+        progress = min(1.0, max(0.0, episode_progress))
+        return self.config.terminal_loss_penalty * (
+            1.0 + self.config.terminal_loss_time_scale * (1.0 - progress)
+        )
+
+    def _timeout_center_biased_rewards(self) -> RewardDict:
+        if self.last_observations is None:
+            return {
+                "agent_0": -self.config.terminal_timeout_penalty,
+                "agent_1": -self.config.terminal_timeout_penalty,
+            }
+
+        d0 = self._distance_to_center(self.last_observations["agent_0"])
+        d1 = self._distance_to_center(self.last_observations["agent_1"])
+        distance_sum = max(d0 + d1, 1e-6)
+
+        penalty0 = self.config.terminal_timeout_penalty + self.config.timeout_center_bias_weight * (d0 / distance_sum)
+        penalty1 = self.config.terminal_timeout_penalty + self.config.timeout_center_bias_weight * (d1 / distance_sum)
+
+        return {
+            "agent_0": -penalty0,
+            "agent_1": -penalty1,
+        }
 
     @staticmethod
     def _validate_actions(actions: JointAction) -> None:

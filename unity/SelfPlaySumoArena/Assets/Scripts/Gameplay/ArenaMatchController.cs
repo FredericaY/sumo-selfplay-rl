@@ -10,12 +10,16 @@ namespace SelfPlayArena.Gameplay
         [SerializeField] private ArenaBoundary2D arenaBoundary;
         [SerializeField] private AgentMotor2D agent0;
         [SerializeField] private AgentMotor2D agent1;
+        [SerializeField] private RealtimeExternalAgentController2D realtimeAgent1Controller;
         [SerializeField] private Vector2 agent0Spawn = new Vector2(-1.5f, 0f);
         [SerializeField] private Vector2 agent1Spawn = new Vector2(1.5f, 0f);
-        [SerializeField] private float stepDuration = 0.1f;
-        [SerializeField] private float episodeDuration = 30f;
+        [SerializeField] private bool allowSideSwap = true;
+        [SerializeField] private float spawnJitterRadius = 0.35f;
+        [SerializeField] private float stepDuration = 0.05f;
+        [SerializeField] private float episodeDuration = 400f;
         [SerializeField] private bool autoSimulateBridgeSteps = false;
         [SerializeField] private bool useManualPhysicsSimulation = true;
+        [SerializeField] private bool logMatchResults = true;
 
         private float stepTimer;
         private float episodeTimer;
@@ -31,6 +35,7 @@ namespace SelfPlayArena.Gameplay
         public bool IsDone => isDone;
         public int Winner => winner;
         public bool AutoSimulateBridgeSteps => autoSimulateBridgeSteps;
+        public bool UseManualPhysicsSimulation => useManualPhysicsSimulation;
 
         public event Action MatchStateChanged;
 
@@ -103,12 +108,15 @@ namespace SelfPlayArena.Gameplay
             CheckRingOut();
         }
 
-        public void ResetMatch()
+        public void ResetMatch(int? resetSeed = null)
         {
+            LogForcedResetIfNeeded();
             agent0.SetUsesExternalSimulationClock(useManualPhysicsSimulation);
             agent1.SetUsesExternalSimulationClock(useManualPhysicsSimulation);
-            agent0.ResetAgent(agent0Spawn);
-            agent1.ResetAgent(agent1Spawn);
+            (Vector2 spawn0, Vector2 spawn1) = GetSpawnLayout(resetSeed);
+            agent0.ResetAgent(GetWorldSpawnPosition(spawn0));
+            agent1.ResetAgent(GetWorldSpawnPosition(spawn1));
+            realtimeAgent1Controller?.ClearAction();
             reward0 = 0f;
             reward1 = 0f;
             winner = -1;
@@ -123,6 +131,12 @@ namespace SelfPlayArena.Gameplay
         public BridgeResponse ResetAndGetState()
         {
             ResetMatch();
+            return BuildResponse("reset");
+        }
+
+        public BridgeResponse ResetAndGetState(int resetSeed)
+        {
+            ResetMatch(resetSeed);
             return BuildResponse("reset");
         }
 
@@ -143,6 +157,66 @@ namespace SelfPlayArena.Gameplay
             }
 
             return BuildResponse("step");
+        }
+
+        public void PrepareBatchStep(AgentAction action0, AgentAction action1)
+        {
+            if (isDone)
+            {
+                return;
+            }
+
+            agent0.SetPendingAction(action0);
+            agent1.SetPendingAction(action1);
+        }
+
+        public void ApplyPreparedBatchActions()
+        {
+            if (isDone)
+            {
+                return;
+            }
+
+            agent0.ApplyPendingAction();
+            agent1.ApplyPendingAction();
+        }
+
+        public void TickBatchPrePhysics(float deltaTime)
+        {
+            if (isDone)
+            {
+                return;
+            }
+
+            agent0.TickMotor(deltaTime);
+            agent1.TickMotor(deltaTime);
+        }
+
+        public void TickBatchPostPhysics(float deltaTime)
+        {
+            if (isDone)
+            {
+                return;
+            }
+
+            episodeTimer += deltaTime;
+            CheckRingOut();
+
+            if (!isDone && episodeTimer >= episodeDuration)
+            {
+                EndMatch(-1, "time_limit");
+            }
+        }
+
+        public BridgeResponse SetRealtimeAgent1Action(AgentAction action)
+        {
+            if (realtimeAgent1Controller == null)
+            {
+                return BuildResponse("missing_realtime_agent1_controller");
+            }
+
+            realtimeAgent1Controller.SetLatestAction(action);
+            return BuildResponse("set_agent1_action");
         }
 
         public void AdvanceOneStep()
@@ -233,6 +307,7 @@ namespace SelfPlayArena.Gameplay
             terminalReason = string.IsNullOrWhiteSpace(reason) ? "unknown" : reason;
             reward0 = matchWinner == 0 ? 1f : matchWinner == 1 ? -1f : 0f;
             reward1 = matchWinner == 1 ? 1f : matchWinner == 0 ? -1f : 0f;
+            LogMatchResult();
             MatchStateChanged?.Invoke();
         }
 
@@ -253,14 +328,110 @@ namespace SelfPlayArena.Gameplay
 
         private AgentObservation BuildObservation(AgentMotor2D self, AgentMotor2D opponent)
         {
+            Vector2 selfLocalPosition = ToArenaLocalPosition(self.transform.position);
+            Vector2 opponentLocalPosition = ToArenaLocalPosition(opponent.transform.position);
             return new AgentObservation
             {
-                selfPosition = self.transform.position,
+                selfPosition = selfLocalPosition,
                 selfVelocity = self.Rigidbody.velocity,
-                opponentPosition = opponent.transform.position,
+                opponentPosition = opponentLocalPosition,
                 opponentVelocity = opponent.Rigidbody.velocity,
                 pushReady = self.PushReady
             };
+        }
+
+        private Vector2 GetWorldSpawnPosition(Vector2 localSpawn)
+        {
+            Transform arenaTransform = GetArenaTransform();
+            return arenaTransform != null
+                ? arenaTransform.TransformPoint(localSpawn)
+                : localSpawn;
+        }
+
+        private Vector2 ToArenaLocalPosition(Vector2 worldPosition)
+        {
+            Transform arenaTransform = GetArenaTransform();
+            return arenaTransform != null
+                ? arenaTransform.InverseTransformPoint(worldPosition)
+                : worldPosition;
+        }
+
+        private Transform GetArenaTransform()
+        {
+            return transform.parent != null ? transform.parent : null;
+        }
+
+        private void LogForcedResetIfNeeded()
+        {
+            if (!logMatchResults || isDone || episodeTimer <= 0f)
+            {
+                return;
+            }
+
+            Debug.Log(
+                $"[{GetArenaLabel()}] reset_without_terminal elapsed={episodeTimer:F2}s " +
+                $"reason=manual_or_external_reset");
+        }
+
+        private void LogMatchResult()
+        {
+            if (!logMatchResults)
+            {
+                return;
+            }
+
+            string outcome = winner switch
+            {
+                0 => "agent_0_win",
+                1 => "agent_1_win",
+                _ => "draw"
+            };
+
+            Debug.Log(
+                $"[{GetArenaLabel()}] result={outcome} reason={terminalReason} " +
+                $"elapsed={episodeTimer:F2}s reward0={reward0:F2} reward1={reward1:F2}");
+        }
+
+        private string GetArenaLabel()
+        {
+            Transform arenaTransform = GetArenaTransform();
+            return arenaTransform != null ? arenaTransform.name : gameObject.name;
+        }
+
+        private (Vector2 spawn0, Vector2 spawn1) GetSpawnLayout(int? resetSeed)
+        {
+            Vector2 baseSpawn0 = agent0Spawn;
+            Vector2 baseSpawn1 = agent1Spawn;
+
+            if (!resetSeed.HasValue)
+            {
+                return (baseSpawn0, baseSpawn1);
+            }
+
+            System.Random rng = new System.Random(resetSeed.Value);
+            bool swapSides = allowSideSwap && rng.NextDouble() < 0.5;
+            Vector2 commonJitter = SampleDiskJitter(rng, spawnJitterRadius);
+
+            if (swapSides)
+            {
+                return (baseSpawn1 + commonJitter, baseSpawn0 + commonJitter);
+            }
+
+            return (baseSpawn0 + commonJitter, baseSpawn1 + commonJitter);
+        }
+
+        private static Vector2 SampleDiskJitter(System.Random rng, float radius)
+        {
+            if (radius <= 0f)
+            {
+                return Vector2.zero;
+            }
+
+            double angle = rng.NextDouble() * Math.PI * 2.0;
+            double distance = Math.Sqrt(rng.NextDouble()) * radius;
+            return new Vector2(
+                (float)(Math.Cos(angle) * distance),
+                (float)(Math.Sin(angle) * distance));
         }
     }
 
@@ -269,6 +440,9 @@ namespace SelfPlayArena.Gameplay
     {
         public string request_id = string.Empty;
         public string command = "get_state";
+        public int[] arena_ids = Array.Empty<int>();
+        public int[] arena_seeds = Array.Empty<int>();
+        public BatchArenaActionPayload[] arenas = Array.Empty<BatchArenaActionPayload>();
         public AgentActionPayload agent0 = new AgentActionPayload();
         public AgentActionPayload agent1 = new AgentActionPayload();
     }

@@ -5,16 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import socket
-from typing import Any, Sequence
+from typing import Any
 
 from agents import HeuristicVectorPolicy, MLPVectorPolicy, RandomVectorPolicy, VectorPolicy
 from agents.imitation_trainer import ImitationTrainConfig, ImitationTrainer
 from envs import UnitySelfPlayArenaConfig, UnitySelfPlayArenaEnv
 from envs.action_adapter import ActionAdapter
-from envs.observation_adapter import ObservationAdapter
+from envs.observation_adapter import DEFAULT_OBS_DIM, ObservationAdapter, ObservationVectorConfig
 
 
-OBS_DIM = 13
+OBS_DIM = DEFAULT_OBS_DIM
 
 
 @dataclass
@@ -69,7 +69,9 @@ def run_single_evaluation_episode(
 ) -> dict[str, Any]:
     """Run one evaluation episode and return a compact summary."""
 
-    observation_adapter = ObservationAdapter()
+    observation_adapter = ObservationAdapter(
+        ObservationVectorConfig(arena_radius=env.config.arena_radius)
+    )
     action_adapter = ActionAdapter()
 
     observations = env.reset()
@@ -83,14 +85,21 @@ def run_single_evaluation_episode(
 
     while not done:
         step_idx = env.episode_step
+        mirror_flags = observation_adapter.joint_mirror_flags(observations)
         observation_vectors = observation_adapter.vectorize_joint(observations)
         policy_action_vectors = {
             "agent_0": policy_agent_0.act(observation_vectors["agent_0"], step_idx),
             "agent_1": policy_agent_1.act(observation_vectors["agent_1"], step_idx),
         }
         actions = {
-            "agent_0": action_adapter.action_from_vector(policy_action_vectors["agent_0"]),
-            "agent_1": action_adapter.action_from_vector(policy_action_vectors["agent_1"]),
+            "agent_0": action_adapter.action_from_vector(
+                policy_action_vectors["agent_0"],
+                mirror_x=mirror_flags["agent_0"],
+            ),
+            "agent_1": action_adapter.action_from_vector(
+                policy_action_vectors["agent_1"],
+                mirror_x=mirror_flags["agent_1"],
+            ),
         }
         observations, rewards, done, info = env.step(actions)
         final_info = info

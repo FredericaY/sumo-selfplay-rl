@@ -24,13 +24,15 @@ Implemented and verified:
 - Unity minimal playable prototype in `unity/SelfPlaySumoArena`
 - TCP bridge between Python and Unity
 - Python environment wrapper with `reset / step / close`
+- Batched 4-arena Unity training support
 - Observation and action vector adapters
 - Rollout collection and JSON trajectory saving
 - Heuristic, random, and MLP vector policies
 - Imitation learning training and checkpoint evaluation
 - Multi-episode evaluation utilities
 - PPO baseline training loop
-- Shared-parameter self-play PPO skeleton
+- Alternating two-policy PPO training
+- Human-vs-policy realtime demo mode
 
 This means the current codebase already supports:
 
@@ -71,7 +73,7 @@ The current training-side workflow is:
 
 Current observation vector size:
 
-- `13`
+- `17`
 
 Current action vector size:
 
@@ -97,46 +99,160 @@ Open the project in:
 
 - `unity/SelfPlaySumoArena`
 
-Make sure the arena scene is configured with:
+For all Python-driven workflows, make sure the arena scene has:
 
 - `MatchController`
 - `ArenaTcpBridge`
 - `Application.runInBackground = true` through the bridge
 
-### 3. Run a bridge smoke test
+### 3. Optional bridge smoke test
 
 ```powershell
 python python/scripts/test_unity_bridge.py --max-steps 100 --agent1-policy flee --sleep 0.05
 ```
 
-### 4. Collect rollouts
+## Main Workflow 1: PPO / Self-Play Training
 
-```powershell
-python python/scripts/collect_rollout.py --agent0-policy chase --agent1-policy flee --max-steps 400 --save
-```
+This is the primary training path used in the project.
 
-### 5. Train imitation policy
+### Unity setup for training
 
-```powershell
-python python/scripts/train_imitation.py --epochs 20 --batch-size 64 --lr 1e-3
-```
+Use the training scene / arena setup and make sure:
 
-### 6. Evaluate a checkpoint
+- `MatchController -> Use Manual Physics Simulation = true`
+- `MatchController -> Auto Simulate Bridge Steps = false`
+- `MatchController -> Step Duration = 0.05`
+- `MatchController -> Episode Duration = 400`
+- `ArenaTcpBridge` is enabled
+- Unity is in `Play` mode before launching Python
 
-```powershell
-python python/scripts/eval_checkpoint.py python/checkpoints/imitation/<checkpoint>.pt --episodes 10 --opponent-policy flee
-```
+If you are using the 4-arena batch setup, also make sure:
 
-### 7. Run PPO / self-play training
+- `ArenaBatchManager` is assigned on `TcpBridge`
+- each arena instance has its own `ArenaMatchController`
+
+### Start training
+
+Run the default config:
 
 ```powershell
 python python/scripts/train_selfplay.py --config python/configs/train.yaml
 ```
 
-To slow down visible stepping for debugging:
+Run alternating A/B training for multiple cycles:
+
+```powershell
+python python/scripts/train_selfplay.py --config python/configs/train.yaml --alternating-cycles 2
+```
+
+Continue from an existing PPO checkpoint:
+
+```powershell
+python python/scripts/train_selfplay.py --config python/configs/train.yaml --init-checkpoint python/checkpoints/ppo/twopolicy_update_0092.pt --alternating-cycles 2
+```
+
+Slow visible stepping for debugging:
 
 ```powershell
 python python/scripts/train_selfplay.py --config python/configs/train.yaml --step-sleep 0.05
+```
+
+### Training config
+
+The main config file is:
+
+- `python/configs/train.yaml`
+
+The most frequently adjusted fields are:
+
+- `env.num_envs`
+- `env.max_episode_steps`
+- `env.edge_safety_weight`
+- `env.outward_pressure_weight`
+- `env.terminal_timeout_penalty`
+- `env.terminal_loss_penalty`
+- `env.terminal_loss_time_scale`
+- `env.opponent_position_scale`
+- `env.relative_position_scale`
+- `training.total_updates`
+- `training.steps_per_update`
+- `training.learning_rate`
+- `training.entropy_coef`
+- `training.finish_active_episodes_before_exit`
+- `training.ema_propagation_enabled`
+- `training.ema_propagation_decay`
+
+## Main Workflow 2: Human vs Policy
+
+This is the main demo / presentation path: you control `agent_0` in Unity and Python drives `agent_1` from a checkpoint.
+
+### Unity setup for human-vs-policy
+
+For the human-controlled arena, set it up like this:
+
+#### `Agent0`
+
+- keep `AgentMotor2D`
+- keep `HumanInputAgent2D`
+
+#### `Agent1`
+
+- keep `AgentMotor2D`
+- keep `RealtimeExternalAgentController2D`
+- do **not** use `HumanInputAgent2D` on `Agent1`
+
+#### `MatchController`
+
+- assign `Realtime Agent1 Controller`
+- `Use Manual Physics Simulation = false`
+- `Auto Simulate Bridge Steps = false`
+
+Human-vs-policy is a realtime mode. It should not use the step-driven training setting with manual physics simulation enabled.
+
+### Play against the latest policy
+
+Start Unity in `Play` mode, then run:
+
+```powershell
+python python/scripts/play_human_vs_policy.py python/checkpoints/ppo/<checkpoint>.pt --policy-side b --reset-on-start --auto-reset
+```
+
+If you want to slow policy updates slightly for easier viewing:
+
+```powershell
+python python/scripts/play_human_vs_policy.py python/checkpoints/ppo/<checkpoint>.pt --policy-side b --reset-on-start --auto-reset --sleep 0.03
+```
+
+Use `--policy-side a` or `--policy-side b` when loading a two-policy PPO checkpoint.
+
+### Find the newest checkpoint in PowerShell
+
+If you want the newest PPO checkpoint quickly:
+
+```powershell
+Get-ChildItem python/checkpoints/ppo/*.pt | Sort-Object LastWriteTime -Descending | Select-Object -First 5
+```
+
+Then plug the newest path into `play_human_vs_policy.py`.
+
+## Other Utilities
+
+### Collect rollouts
+
+```powershell
+python python/scripts/collect_rollout.py --agent0-policy chase --agent1-policy flee --max-steps 400 --save
+```
+
+### Train imitation policy
+
+```powershell
+python python/scripts/train_imitation.py --epochs 20 --batch-size 64 --lr 1e-3
+```
+
+### Evaluate a checkpoint
+
+```powershell
+python python/scripts/eval_checkpoint.py python/checkpoints/imitation/<checkpoint>.pt --episodes 10 --opponent-policy flee
 ```
 
 ## Repository Structure
@@ -188,18 +304,18 @@ Key Python modules:
 
 ## Current Limitations
 
-- The PPO implementation is an early baseline, not a full experiment framework yet
-- Self-play currently uses a shared-parameter setup before any opponent-pool logic
-- Reward shaping and experiment tracking are still minimal
-- Unity presentation polish is still ahead of the current training milestone
+- The PPO implementation is still an early experiment framework rather than a polished benchmark suite
+- Self-play currently focuses on alternating two-policy training and does not yet include a full opponent pool / league setup
+- Reward shaping and reward attribution are still under active iteration
+- Unity presentation polish is still behind the core training/debugging functionality
 
 ## Next Milestones
 
-- stabilize shared-parameter PPO training
-- compare trained policies against multiple baselines
-- add checkpoint pool / opponent sampling variants
-- refine reward design and experiment logging
-- export a stronger final policy back into the Unity demo flow
+- stabilize alternating two-policy PPO training
+- improve reward design and symmetry handling
+- compare trained checkpoints against stronger baselines
+- add checkpoint pool / opponent sampling variants if time allows
+- finalize a stronger policy for the Unity demo flow
 
 ## Author
 

@@ -21,10 +21,10 @@ from algorithms.rollout_collector import RolloutCollector
 from algorithms.trajectory_serializer import TrajectorySerializer
 from envs import UnitySelfPlayArenaConfig, UnitySelfPlayArenaEnv
 from envs.action_adapter import ActionAdapter
-from envs.observation_adapter import ObservationAdapter
+from envs.observation_adapter import DEFAULT_OBS_DIM, ObservationAdapter, ObservationVectorConfig
 
 
-OBS_DIM = 13
+OBS_DIM = DEFAULT_OBS_DIM
 
 
 def parse_args() -> argparse.Namespace:
@@ -88,9 +88,12 @@ def main() -> None:
             max_episode_steps=args.max_steps,
         )
     )
+    observation_adapter = ObservationAdapter(
+        ObservationVectorConfig(arena_radius=env.config.arena_radius)
+    )
     collector = RolloutCollector(
         env=env,
-        observation_adapter=ObservationAdapter(),
+        observation_adapter=observation_adapter,
         action_adapter=ActionAdapter(),
     )
     serializer = TrajectorySerializer()

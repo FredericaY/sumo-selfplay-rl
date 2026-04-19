@@ -1,33 +1,65 @@
 experiment_name: exp002_selfplay_ppo
-seed: 42
+seed: 167
 
 env:
   host: 127.0.0.1
   port: 5055
-  max_episode_steps: 400
+  num_envs: 10
+  max_episode_steps: 8000
+  use_shaped_rewards: true
+  step_penalty: 0.0
+  edge_safety_weight: 0.02
+  outward_pressure_weight: 0.02
+  terminal_timeout_penalty: 0
+  timeout_center_bias_weight: 0.2
+  terminal_win_reward: 1.0
+  terminal_loss_penalty: 1.0
+  terminal_loss_time_scale: 0.5
+  canonicalize_left_right: true
+  opponent_position_scale: 2.0
+  relative_position_scale: 1.5
 
 training:
-  total_updates: 10
-  steps_per_update: 256
+  total_updates: 3
+  steps_per_update: 1024
   train_epochs: 4
-  minibatch_size: 64
-  learning_rate: 0.0003
+  minibatch_size: 256
+  learning_rate: 0.0002
   clip_ratio: 0.2
   value_coef: 0.5
-  entropy_coef: 0.01
+  entropy_coef: 0.002
   gamma: 0.99
   gae_lambda: 0.95
   debug_every: 0
   step_sleep_s: 0.0
-  train_mode: shared_selfplay
+  train_mode: alternating_two_policy
+  train_side: a
+  init_checkpoint:
+  load_optimizer_state: false
+  finish_active_episodes_before_exit: true
+  mutation_enabled: true
+  mutation_every_segments: 4
+  mutation_std: 0.02
+  ema_propagation_enabled: true
+  ema_propagation_decay: 0.95
+
+
 
 selfplay:
   enabled: true
-  opponent_sampling: latest
+  opponent_sampling: pool
   opponent_pool_size: 8
   opponent_policy: flee
 
 logging:
   checkpoint_dir: python/checkpoints/ppo
 
-# TODO: Add true checkpoint pools and opponent sampling once shared self-play stabilizes.
+# alternating_two_policy:
+# - train_side=a means update policy_a while policy_b is frozen
+# - next round switch to train_side=b and initialize from the last twopolicy checkpoint
+# mutation:
+# - when enabled, every `mutation_every_segments` alternating segments the side about to train
+#   is lightly perturbed before training starts
+# opponent_sampling:
+# - latest: always use the latest checkpoint pair
+# - pool: before each segment, sample the frozen opponent side from the checkpoint pool

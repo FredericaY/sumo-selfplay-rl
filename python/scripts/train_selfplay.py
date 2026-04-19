@@ -31,11 +31,34 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional wall-clock sleep in seconds after each environment step for easier visual debugging.",
     )
+    parser.add_argument(
+        "--init-checkpoint",
+        default=None,
+        help="Optional PPO checkpoint used to initialize or continue training.",
+    )
+    parser.add_argument(
+        "--train-side",
+        choices=["a", "b"],
+        default=None,
+        help="When using alternating_two_policy mode, choose which side to train first in this run.",
+    )
+    parser.add_argument(
+        "--alternating-cycles",
+        type=int,
+        default=1,
+        help="When using alternating_two_policy mode, run this many automatic A->B cycles.",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    main(args.config, step_sleep_override=args.step_sleep)
+    main(
+        args.config,
+        step_sleep_override=args.step_sleep,
+        init_checkpoint_override=args.init_checkpoint,
+        train_side_override=args.train_side,
+        alternating_cycles=args.alternating_cycles,
+    )
 
     # TODO: Add run naming, seeding, and experiment folder creation.

@@ -21,13 +21,14 @@ else:
 
 from agents.imitation_dataset import RolloutImitationDataset
 from agents.policy import MLPPolicyNetwork
+from envs.observation_adapter import DEFAULT_OBS_DIM
 
 
 @dataclass
 class ImitationTrainConfig:
     """Hyperparameters for the first imitation learning run."""
 
-    obs_dim: int = 13
+    obs_dim: int = DEFAULT_OBS_DIM
     action_dim: int = 3
     hidden_sizes: Sequence[int] = (64, 64)
     batch_size: int = 64

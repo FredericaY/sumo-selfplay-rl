@@ -74,15 +74,25 @@ class RolloutCollector:
         done = False
         while not done:
             step_idx = self.env.episode_step
+            mirror_flags = self.observation_adapter.joint_mirror_flags(observations)
             policy_action_vectors = {
                 "agent_0": policy_agent_0.act(observation_vectors["agent_0"], step_idx),
                 "agent_1": policy_agent_1.act(observation_vectors["agent_1"], step_idx),
             }
             actions = {
-                "agent_0": self.action_adapter.action_from_vector(policy_action_vectors["agent_0"]),
-                "agent_1": self.action_adapter.action_from_vector(policy_action_vectors["agent_1"]),
+                "agent_0": self.action_adapter.action_from_vector(
+                    policy_action_vectors["agent_0"],
+                    mirror_x=mirror_flags["agent_0"],
+                ),
+                "agent_1": self.action_adapter.action_from_vector(
+                    policy_action_vectors["agent_1"],
+                    mirror_x=mirror_flags["agent_1"],
+                ),
             }
-            executed_action_vectors = self.action_adapter.vectorize_joint(actions)
+            executed_action_vectors = {
+                "agent_0": self.action_adapter.vectorize_action(actions["agent_0"], mirror_x=mirror_flags["agent_0"]),
+                "agent_1": self.action_adapter.vectorize_action(actions["agent_1"], mirror_x=mirror_flags["agent_1"]),
+            }
             next_observations, rewards, done, info = self.env.step(actions)
             next_observation_vectors = self.observation_adapter.vectorize_joint(next_observations)
             transition = Transition(

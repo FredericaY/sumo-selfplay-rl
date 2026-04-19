@@ -1,0 +1,138 @@
+% CVPR 2022 Paper Template
+% based on the CVPR template provided by Ming-Ming Cheng (https://github.com/MCG-NKU/CVPR_Template)
+% modified and extended by Stefan Roth (stefan.roth@NOSPAMtu-darmstadt.de)
+
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+%%%%%%%%% PAPER TYPE  - PLEASE UPDATE FOR FINAL VERSION
+% \usepackage[review]{cvpr}      % To produce the REVIEW version
+% \usepackage{cvpr}              % To produce the CAMERA-READY version
+\usepackage[pagenumbers]{cvpr} % To force page numbers, e.g. for an arXiv version
+
+% Include other packages here, before hyperref.
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+
+% It is strongly recommended to use hyperref, especially for the review version.
+% hyperref with option pagebackref eases the reviewers' job.
+% Please disable hyperref *only* if you encounter grave issues, e.g. with the
+% file validation for the camera-ready version.
+%
+% If you comment hyperref and then uncomment it, you should delete
+% ReviewTempalte.aux before re-running LaTeX.
+% (Or just hit 'q' on the first LaTeX run, let it finish, and you
+%  should be clear).
+\usepackage[pagebackref,breaklinks,colorlinks]{hyperref}
+
+
+% Support for easy cross-referencing
+\usepackage[capitalize]{cleveref}
+\crefname{section}{Sec.}{Secs.}
+\Crefname{section}{Section}{Sections}
+\Crefname{table}{Table}{Tables}
+\crefname{table}{Tab.}{Tabs.}
+
+
+%%%%%%%%% PAPER ID  - PLEASE UPDATE
+\def\cvprPaperID{0}
+\def\confName{CSE 559a}
+\def\confYear{\the\year{}}
+
+
+\begin{document}
+
+%%%%%%%%% TITLE - PLEASE UPDATE
+\title{Progress Report: DeepRL Self-Play Arena}
+
+\author{
+Julie Yang
+}
+\maketitle
+
+%%%%%%%%% ABSTRACT
+\begin{abstract}
+This project studies a small multi-agent deep reinforcement learning environment in which two agents compete in a toy sumo-style arena and attempt to push each other out of bounds. The current progress milestone focused on building a complete end-to-end pipeline rather than maximizing performance. At this point, the Unity environment, Python--Unity bridge, trajectory collection, imitation learning baseline, checkpoint evaluation, and an initial PPO/self-play training framework are all implemented and running. The main remaining challenge is no longer systems integration, but stabilizing self-play so that learned policies exhibit less degenerate behavior and more meaningful positional play.
+\end{abstract}
+
+%%%%%%%%% BODY TEXT
+\section{Project Overview}
+
+The goal of this project is to build a compact 1v1 self-play benchmark that is simple enough to iterate on quickly but rich enough to expose core multi-agent RL issues such as instability, policy collapse, and opponent adaptation. The final demonstration target is a Unity scene in which two circular agents compete inside a circular arena. Each agent has only two high-level actions: continuous movement in 2D and a push/dash action with a cooldown. A match ends when one player is pushed outside the arena boundary, or when the episode times out.
+
+Compared with the original proposal, the largest practical change is that I prioritized building a full working pipeline first: Unity environment, local bridge, vector observations, rollout collection, checkpointing, and evaluation. This shift was necessary because early project risk was dominated by integration issues rather than by algorithm choice. Once the loop was working end to end, I started iterating on observation design, reward shaping, and self-play training structure.
+
+\section{Collaboration Strategy}
+
+This is a solo project. My overall strategy has been to keep the technical stack modular while staying lightweight enough to debug alone. Unity is used for environment authoring, physics, and eventual presentation, while Python is used for data collection, learning, checkpoint evaluation, and experiment scripts.
+
+I also use coding assistance tools to speed up routine implementation, scaffolding, and debugging, but all design decisions, environment changes, training choices, and experiment interpretation are done by me. In practice, that means I treat the assistant as a programming collaborator rather than as an autonomous experiment designer: I decide what to build, inspect the code paths, test intermediate outputs, and adjust the system based on observed behavior.
+
+\section{Proposed Approach}
+
+The current approach has four layers.
+
+\textbf{Environment.} The Unity environment is a minimal 2D arena with two circular rigidbodies, no gravity, out-of-bounds termination, and reset logic. One of the early milestones was to verify that Python could send actions into Unity and receive observations, rewards, and terminal flags back reliably.
+
+\textbf{Observation and action interface.} The action vector currently has three dimensions: movement in $x$, movement in $y$, and a binary push trigger. The push direction is determined by the agent's current velocity direction, which makes the action semantics cleaner for a learned policy than for a human player. The observation vector was recently expanded from 13 to 17 dimensions. In addition to positions, velocities, relative position, relative velocity, and push readiness, the policy now receives explicit boundary-related features: self distance to arena center, self edge margin, opponent distance to center, and opponent edge margin. This change was motivated by repeated failures in which agents appeared unable to reason reliably about proximity to the arena edge.
+
+\textbf{Learning pipeline.} The Python side includes rollout collection, JSON trajectory serialization, imitation learning from collected trajectories, evaluation of saved checkpoints back inside Unity, and PPO-style training. I first trained small MLP policies through behavior cloning to verify that the full observation/action/checkpoint pipeline was correct. After that, I added a PPO actor-critic baseline and then a shared-parameter self-play skeleton.
+
+\textbf{Self-play structure.} The most recent modification is a move away from pure shared-parameter self-play toward alternating two-policy training. The motivation is that a single shared policy fighting itself can remain trapped in mutually bad behaviors. The new setup maintains separate policy A and policy B, freezes one side while training the other, and supports repeated A$\rightarrow$B cycles.
+
+\begin{figure}[t]
+    \centering
+    \IfFileExists{figures/unity_progress_scene.png}{
+        \includegraphics[width=\linewidth]{figures/unity_progress_scene.png}
+    }{
+        \fbox{\parbox{0.95\linewidth}{\small Place the provided Unity screenshot at \texttt{docs/progress/figures/unity\_progress\_scene.png} to render it here. The intended figure shows the current SampleScene layout, the circular arena, the two agents, and the MatchController inspector configuration used during development.}}
+    }
+    \caption{Current Unity prototype and scene configuration. The environment already supports both training mode and a human-vs-policy mode in which the human controls agent 0 while Python drives agent 1 through the TCP bridge.}
+    \label{fig:unity_setup}
+\end{figure}
+
+\section{Data}
+
+There is no external dataset in the usual supervised-learning sense. Instead, the project generates its own on-policy interaction data online. The data sources currently used are:
+
+\begin{itemize}
+    \item Online transitions sampled from the Unity environment through the TCP bridge.
+    \item Saved rollout trajectories serialized to JSON for inspection and imitation learning.
+    \item Checkpoints produced by imitation learning and PPO/self-play training.
+\end{itemize}
+
+This means the ``data'' component of the project is really an environment plus a trajectory generation pipeline. That is appropriate for the project because the main question is not representation learning from fixed offline data, but rather how to train competitive policies in a simple multi-agent environment.
+
+\section{Initial Results}
+
+The strongest result so far is that the entire pipeline is operational. Early work focused on debugging Unity--Python communication and validating that observations and actions were aligned correctly. Once this was stable, I was able to:
+
+\begin{itemize}
+    \item Collect trajectories from Unity and save them as structured rollout files.
+    \item Train a behavior cloning policy from rollout data.
+    \item Load that policy back into Python and evaluate it inside Unity.
+    \item Run PPO updates against scripted baselines.
+    \item Run shared-parameter self-play and then upgrade to alternating two-policy training.
+\end{itemize}
+
+Imitation learning produced a stable sanity-check baseline. For example, a learned MLP policy trained on heuristic rollouts was able to consistently defeat a simple flee policy in evaluation, which confirmed that the observation, action, checkpoint, and evaluation code paths were all functioning.
+
+For PPO, the current takeaway is mixed but informative. The training framework itself appears valid: losses remain finite, entropy does not collapse immediately, checkpoints are saved correctly, and policies can be reloaded. However, the learned behavior is still often poor. Under both shared-parameter and alternating-policy self-play, the agents still exhibit locally bad behavior such as overcommitting with push, drifting toward the edge, or failing to exploit obvious positional advantages. This is precisely why I expanded the observation vector to include explicit edge-awareness features and why I am moving toward stronger self-play structure instead of relying only on symmetric latest-vs-latest training.
+
+\section{Current Concerns and Questions}
+
+The main concern is no longer whether the system runs, but whether the learning signal is strong and stable enough to produce intelligent play. At the moment, the framework is good enough to support experiments, but the learned policies are still too brittle and too easy to trap in low-quality behavior.
+
+The most important open issues are:
+
+\begin{itemize}
+    \item \textbf{Self-play stability.} Pure symmetric self-play appears vulnerable to degenerate behaviors, which is why I introduced alternating two-policy training. I still need to verify whether this actually improves robustness over longer runs.
+    \item \textbf{Reward design.} Sparse terminal rewards are clean, but may be too weak on their own. I need to determine whether additional shaping should be introduced and, if so, how to keep it from overpowering the actual objective.
+    \item \textbf{Environment dynamics.} Push currently creates abrupt trajectories that can reduce tactical maneuvering space. I am still tuning rigidbody and movement parameters so that matches contain more positional play and less accidental self-elimination.
+    \item \textbf{Evaluation quality.} I now have multi-episode evaluation scripts, but I still need a cleaner experimental protocol for comparing checkpoints and summarizing progress.
+\end{itemize}
+
+At this point, the most useful feedback would be whether the current direction---small symmetric environment, explicit observation engineering, and alternating self-play training---looks like a good scope for the final project, or whether I should simplify the training agenda and spend more time on evaluation and presentation.
+
+\end{document}

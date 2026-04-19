@@ -1,0 +1,679 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{titlesec}
+
+\titleformat{\section}{\large\bfseries}{}{0em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
+
+\setlist[itemize]{leftmargin=1.4em}
+\setlist[enumerate]{leftmargin=1.6em}
+
+\title{Presentation Outline: DeepRL Self-Play Arena}
+\author{Julie Yang}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Goal of This Outline}
+
+This document is a slide-by-slide outline for the final presentation of the DeepRL Self-Play Arena project. It is not a final report. The emphasis is therefore on:
+
+\begin{itemize}
+    \item motivation and project scope,
+    \item development process and engineering milestones,
+    \item major design decisions,
+    \item demonstrations and experimental observations,
+    \item what worked, what did not work, and what was learned.
+\end{itemize}
+
+The presentation should feel like a story of building a working multi-agent RL system in Unity, not just a list of algorithms.
+
+\section{Recommended High-Level Presentation Structure}
+
+Recommended total length: 12--16 slides.
+
+\begin{enumerate}
+    \item Motivation and project definition
+    \item Related work / inspiration
+    \item Environment and task design
+    \item System architecture
+    \item Development milestones
+    \item Training pipeline evolution
+    \item Results and demos
+    \item Limitations and lessons learned
+    \item Final takeaways
+\end{enumerate}
+
+\section{Detailed Slide Outline}
+
+\subsection*{Slide 1: Title Slide}
+
+\textbf{Title:} DeepRL Self-Play Arena: Building a Unity-Based Multi-Agent RL Environment
+
+\textbf{Main points}
+\begin{itemize}
+    \item Course project title
+    \item Your name
+    \item Course / semester
+    \item One-line summary: a 1v1 sumo-style self-play RL environment with training in Python and real-time demonstration in Unity
+\end{itemize}
+
+\textbf{Suggested visual}
+\begin{itemize}
+    \item Screenshot of the Unity arena
+    \item Or a screenshot of human-vs-policy mode
+\end{itemize}
+
+\textbf{Speaker goal}
+\begin{itemize}
+    \item Give the audience immediate intuition for the project before any technical explanation
+\end{itemize}
+
+\subsection*{Slide 2: Motivation}
+
+\textbf{Suggested title:} Why This Project?
+
+\textbf{Main points}
+\begin{itemize}
+    \item Self-play is powerful but unstable in competitive multi-agent RL
+    \item Many classic examples, such as AlphaGo Zero and OpenAI Five, show the strength of self-play but also imply non-stationarity and opponent-distribution issues
+    \item A small Unity arena is a good testbed:
+    \begin{itemize}
+        \item simple enough to debug,
+        \item rich enough to exhibit policy collapse, cycling, and brittle behaviors,
+        \item visually interpretable for presentation
+    \end{itemize}
+    \item Personal motivation: build not only a training script, but a complete interactive system that supports both learning and demonstration
+\end{itemize}
+
+\textbf{Suggested phrasing}
+\begin{itemize}
+    \item The project asks: can we build a compact competitive RL environment that is easy to visualize, yet still exposes the core stability problems of self-play?
+\end{itemize}
+
+\subsection*{Slide 3: Original Proposal vs. Final Development Direction}
+
+\textbf{Suggested title:} Initial Plan and How It Changed
+
+\textbf{Main points}
+\begin{itemize}
+    \item Original proposal focused on:
+    \begin{itemize}
+        \item Unity ML-Agents style PPO self-play
+        \item opponent pooling and sampling strategies
+        \item evaluating training stability and robustness
+    \end{itemize}
+    \item In practice, the early challenge was not only algorithm design but full-stack integration
+    \item The project direction shifted toward:
+    \begin{itemize}
+        \item building a reliable Unity--Python bridge,
+        \item defining a stable observation/action interface,
+        \item constructing end-to-end training and evaluation loops,
+        \item then iterating on self-play structure and reward design
+    \end{itemize}
+    \item This was a necessary shift, not a distraction
+\end{itemize}
+
+\textbf{Key message}
+\begin{itemize}
+    \item The biggest real project lesson was that systems integration dominated algorithm experimentation in the first half of development
+\end{itemize}
+
+\subsection*{Slide 4: Literature and Inspiration}
+
+\textbf{Suggested title:} Related Work and What This Project Borrowed
+
+\textbf{Main points}
+\begin{itemize}
+    \item AlphaGo Zero:
+    \begin{itemize}
+        \item self-play as a mechanism for continual policy improvement
+    \end{itemize}
+    \item OpenAI Five:
+    \begin{itemize}
+        \item importance of training against historical versions and maintaining opponent diversity
+    \end{itemize}
+    \item Emergent Complexity via Multi-Agent Competition:
+    \begin{itemize}
+        \item multi-agent competition can create interesting behaviors, but also unstable or degenerate training dynamics
+    \end{itemize}
+    \item This project did not attempt to reproduce those systems
+    \item Instead, it translated their core ideas into a much smaller and more inspectable Unity environment
+\end{itemize}
+
+\textbf{Suggested visual}
+\begin{itemize}
+    \item A simple table with three rows:
+    \begin{itemize}
+        \item paper/system,
+        \item idea borrowed,
+        \item how it influenced this project
+    \end{itemize}
+\end{itemize}
+
+\subsection*{Slide 5: Task and Environment Definition}
+
+\textbf{Suggested title:} The Arena Task
+
+\textbf{Main points}
+\begin{itemize}
+    \item Two circular agents compete inside a circular arena
+    \item Objective: push the opponent outside the arena boundary
+    \item Episode ends on:
+    \begin{itemize}
+        \item opponent ring-out,
+        \item self ring-out,
+        \item time limit
+    \end{itemize}
+    \item Agent action semantics:
+    \begin{itemize}
+        \item 2D movement,
+        \item push/dash with cooldown
+    \end{itemize}
+    \item Why this task is useful:
+    \begin{itemize}
+        \item easy to understand,
+        \item compact state/action space,
+        \item still contains positioning, pressure, risk control, and timing
+    \end{itemize}
+\end{itemize}
+
+\textbf{Suggested visual}
+\begin{itemize}
+    \item top-down arena screenshot with labels for spawn points, arena boundary, and agents
+\end{itemize}
+
+\subsection*{Slide 6: System Architecture}
+
+\textbf{Suggested title:} Unity + Python Architecture
+
+\textbf{Main points}
+\begin{itemize}
+    \item Unity handles:
+    \begin{itemize}
+        \item physics,
+        \item arena state,
+        \item reset logic,
+        \item final demo presentation
+    \end{itemize}
+    \item Python handles:
+    \begin{itemize}
+        \item rollout collection,
+        \item observation/action vectorization,
+        \item imitation learning,
+        \item PPO training,
+        \item checkpoint evaluation
+    \end{itemize}
+    \item The two are connected by a custom TCP bridge
+\end{itemize}
+
+\textbf{Suggested subdiagram}
+\begin{itemize}
+    \item Unity scene $\leftrightarrow$ TCP bridge $\leftrightarrow$ Python env wrapper $\leftrightarrow$ training / evaluation scripts
+\end{itemize}
+
+\textbf{Key message}
+\begin{itemize}
+    \item One of the central achievements of the project is not a single policy result, but a working interactive RL stack
+\end{itemize}
+
+\subsection*{Slide 7: Development Phase 1 --- Bridging Python and Unity}
+
+\textbf{Suggested title:} Milestone 1: Making Unity and Python Talk
+
+\textbf{Main points}
+\begin{itemize}
+    \item Built a TCP bridge for command/response interaction
+    \item Early milestone:
+    \begin{itemize}
+        \item send actions from Python,
+        \item advance the Unity environment,
+        \item return observations, rewards, and done flags
+    \end{itemize}
+    \item Key debugging issues:
+    \begin{itemize}
+        \item connection stability,
+        \item request/response format,
+        \item persistent vs. short-lived connections,
+        \item distinguishing training mode from real-time mode
+    \end{itemize}
+    \item Final result:
+    \begin{itemize}
+        \item persistent TCP connection,
+        \item single-environment control,
+        \item later extension to batched arenas
+    \end{itemize}
+\end{itemize}
+
+\textbf{Suggested visual}
+\begin{itemize}
+    \item simple request/response JSON example
+\end{itemize}
+
+\subsection*{Slide 8: Development Phase 2 --- Action Format}
+
+\textbf{Suggested title:} Milestone 2: Defining the Action Space
+
+\textbf{Main points}
+\begin{itemize}
+    \item Initial task: define actions that are simple enough for RL but still expressive
+    \item Final vector action:
+    \begin{itemize}
+        \item `move_x`
+        \item `move_y`
+        \item `use_push`
+    \end{itemize}
+    \item Important design choice:
+    \begin{itemize}
+        \item push direction depends on current motion direction rather than a separate push vector
+    \end{itemize}
+    \item Why this was useful:
+    \begin{itemize}
+        \item smaller action space,
+        \item easier policy output semantics,
+        \item more stable interface between Python and Unity
+    \end{itemize}
+    \item Later refinement:
+    \begin{itemize}
+        \item move became continuous/held input,
+        \item push remained pulse-like
+    \end{itemize}
+\end{itemize}
+
+\textbf{Nice insight to say aloud}
+\begin{itemize}
+    \item A lot of RL difficulty comes from badly chosen action semantics, not just from the optimizer
+\end{itemize}
+
+\subsection*{Slide 9: Development Phase 3 --- Observation Design}
+
+\textbf{Suggested title:} Milestone 3: What the Agent Sees
+
+\textbf{Main points}
+\begin{itemize}
+    \item Observation started simple:
+    \begin{itemize}
+        \item self position / velocity
+        \item opponent position / velocity
+        \item push readiness
+    \end{itemize}
+    \item Then expanded from 13D to 17D
+    \item Added explicit arena-awareness:
+    \begin{itemize}
+        \item self distance to center
+        \item self edge margin
+        \item opponent distance to center
+        \item opponent edge margin
+    \end{itemize}
+    \item Later added:
+    \begin{itemize}
+        \item left-right canonicalization,
+        \item opponent-position scaling,
+        \item relative-position scaling
+    \end{itemize}
+    \item Why this mattered:
+    \begin{itemize}
+        \item reduced symmetry-breaking artifacts,
+        \item reduced strange side-dependent behaviors,
+        \item made the opponent's location more salient
+    \end{itemize}
+\end{itemize}
+
+\textbf{Suggested visual}
+\begin{itemize}
+    \item one slide with the 17D vector grouped into categories
+\end{itemize}
+
+\subsection*{Slide 10: Development Phase 4 --- Data and Evaluation Pipeline}
+
+\textbf{Suggested title:} Milestone 4: Rollouts, Checkpoints, and Evaluation
+
+\textbf{Main points}
+\begin{itemize}
+    \item Built a formal Python environment wrapper:
+    \begin{itemize}
+        \item `reset`
+        \item `step`
+        \item `close`
+    \end{itemize}
+    \item Added rollout collection
+    \item Added JSON trajectory saving
+    \item Added checkpoint evaluation scripts
+    \item Added multi-episode evaluation summaries
+    \item This made the project experimentally usable rather than only visually interactive
+\end{itemize}
+
+\textbf{Key message}
+\begin{itemize}
+    \item Before PPO experiments mattered, the project needed reliable instrumentation
+\end{itemize}
+
+\subsection*{Slide 11: Development Phase 5 --- Imitation Learning Baseline}
+
+\textbf{Suggested title:} Milestone 5: Sanity Check via Behavior Cloning
+
+\textbf{Main points}
+\begin{itemize}
+    \item Before full RL, trained a small MLP policy on heuristic rollouts
+    \item Why imitation learning was useful:
+    \begin{itemize}
+        \item checked observation formatting,
+        \item checked action decoding,
+        \item checked checkpoint save/load,
+        \item checked evaluation back in Unity
+    \end{itemize}
+    \item Result:
+    \begin{itemize}
+        \item the learned MLP could reliably imitate simple heuristic behavior
+    \end{itemize}
+\end{itemize}
+
+\textbf{Interpretation}
+\begin{itemize}
+    \item This did not solve the final task, but it validated the core learning pipeline
+\end{itemize}
+
+\subsection*{Slide 12: Development Phase 6 --- PPO Baseline}
+
+\textbf{Suggested title:} Milestone 6: From Imitation to PPO
+
+\textbf{Main points}
+\begin{itemize}
+    \item Added a minimal actor-critic PPO implementation
+    \item First tested in a simpler setting:
+    \begin{itemize}
+        \item train one agent against a fixed scripted opponent
+    \end{itemize}
+    \item This helped verify:
+    \begin{itemize}
+        \item rollout collection under on-policy learning,
+        \item value estimation,
+        \item clipping loss,
+        \item checkpoint persistence
+    \end{itemize}
+    \item Observed issue:
+    \begin{itemize}
+        \item training could run, but learned behavior was often weak or degenerate
+    \end{itemize}
+\end{itemize}
+
+\textbf{Suggested plot}
+\begin{itemize}
+    \item one example of PPO log values or a screenshot of console outputs with policy loss / value loss / returns
+\end{itemize}
+
+\subsection*{Slide 13: Development Phase 7 --- Self-Play Variants}
+
+\textbf{Suggested title:} Milestone 7: Shared Self-Play, Then Alternating A/B
+
+\textbf{Main points}
+\begin{itemize}
+    \item Started with shared-parameter self-play
+    \item Problem:
+    \begin{itemize}
+        \item too easy to collapse into symmetric low-quality behavior
+    \end{itemize}
+    \item Upgraded to alternating two-policy training:
+    \begin{itemize}
+        \item policy A trains while B is frozen,
+        \item then policy B trains while A is frozen
+    \end{itemize}
+    \item Additional mechanisms introduced later:
+    \begin{itemize}
+        \item finish active episodes before segment exit,
+        \item EMA propagation between A and B,
+        \item opponent pool sampling,
+        \item periodic mutation
+    \end{itemize}
+\end{itemize}
+
+\textbf{Key message}
+\begin{itemize}
+    \item A large part of the project became designing a better self-play training process, not just a better neural network
+\end{itemize}
+
+\subsection*{Slide 14: Development Phase 8 --- Batch PPO}
+
+\textbf{Suggested title:} Milestone 8: Parallel Arenas for Higher Throughput
+
+\textbf{Main points}
+\begin{itemize}
+    \item Single-arena training was too slow and too correlated
+    \item Added a batched 4-arena Unity mode
+    \item Key engineering issue:
+    \begin{itemize}
+        \item batch stepping must share one global physics simulation and advance all arenas together
+    \end{itemize}
+    \item Added seeded reset with per-arena variation
+    \item Later increased arena count in config
+    \item Goal:
+    \begin{itemize}
+        \item more data throughput,
+        \item less repeated experience,
+        \item better diversity during training
+    \end{itemize}
+\end{itemize}
+
+\textbf{Suggested visual}
+\begin{itemize}
+    \item screenshot of multiple arenas running at once
+\end{itemize}
+
+\subsection*{Slide 15: Development Phase 9 --- Human vs Policy Demo}
+
+\textbf{Suggested title:} Milestone 9: Real-Time Play Against the Learned Policy
+
+\textbf{Main points}
+\begin{itemize}
+    \item Added a separate real-time mode:
+    \begin{itemize}
+        \item human controls agent 0 with keyboard,
+        \item Python drives agent 1 using the latest checkpoint
+    \end{itemize}
+    \item This required separating:
+    \begin{itemize}
+        \item training-time manual simulation mode,
+        \item real-time interactive mode
+    \end{itemize}
+    \item Why this mattered:
+    \begin{itemize}
+        \item better qualitative evaluation,
+        \item much more compelling final demo,
+        \item exposed weaknesses that pure metrics did not show
+    \end{itemize}
+\end{itemize}
+
+\textbf{This should definitely be a live demo or a short video}
+
+\subsection*{Slide 16: Reward Design Evolution}
+
+\textbf{Suggested title:} Reward Design Was Harder Than Expected
+
+\textbf{Main points}
+\begin{itemize}
+    \item Sparse win/loss reward is clean but weak
+    \item Heavy draw or timeout penalties caused bad side effects
+    \begin{itemize}
+        \item too passive,
+        \item too suicidal,
+        \item strange edge-seeking behavior
+    \end{itemize}
+    \item Introduced several refinements during development:
+    \begin{itemize}
+        \item edge safety shaping,
+        \item outward pressure shaping,
+        \item time-scaled loss penalty,
+        \item timeout center-bias penalty
+    \end{itemize}
+    \item Main lesson:
+    \begin{itemize}
+        \item the difficult part was not only defining the objective ``win,'' but defining what useful intermediate behavior should be rewarded
+    \end{itemize}
+\end{itemize}
+
+\textbf{Good thing to say out loud}
+\begin{itemize}
+    \item This project made it very clear that reward design is not a small detail; it shapes the entire character of the learned policy
+\end{itemize}
+
+\subsection*{Slide 17: Results --- What Was Successfully Achieved}
+
+\textbf{Suggested title:} Main Results and Deliverables
+
+\textbf{Main points}
+\begin{itemize}
+    \item Built a functioning Unity competitive environment
+    \item Built a custom Unity--Python TCP integration layer
+    \item Built a full training/evaluation workflow in Python
+    \item Verified imitation learning and PPO checkpoint loops
+    \item Implemented alternating two-policy self-play
+    \item Implemented batched training arenas
+    \item Implemented human-vs-policy real-time play mode
+\end{itemize}
+
+\textbf{Good framing}
+\begin{itemize}
+    \item Even when the final learned policy is imperfect, the system-level deliverable is substantial and functional
+\end{itemize}
+
+\subsection*{Slide 18: Results --- Example Behaviors and Qualitative Findings}
+
+\textbf{Suggested title:} What the Agents Learned, and What They Still Struggle With
+
+\textbf{Possible talking points}
+\begin{itemize}
+    \item Learned some basic pressure and arena-awareness behaviors
+    \item Different reward settings led to clearly different styles
+    \item Human-vs-policy mode made weaknesses obvious:
+    \begin{itemize}
+        \item brittle tactics,
+        \item symmetry artifacts,
+        \item overcommitment or passivity,
+        \item weak adaptation against a real human
+    \end{itemize}
+    \item More complex self-play machinery improved diversity, but did not fully solve strategic sophistication
+\end{itemize}
+
+\textbf{Suggested visual}
+\begin{itemize}
+    \item GIF/video stills of:
+    \begin{itemize}
+        \item a successful push-out,
+        \item a weird degenerate policy,
+        \item human-vs-policy interaction
+    \end{itemize}
+\end{itemize}
+
+\subsection*{Slide 19: What Was Not Fully Achieved}
+
+\textbf{Suggested title:} Limitations
+
+\textbf{Main points}
+\begin{itemize}
+    \item Final policies are still not deeply strategic against humans
+    \item Reward design remains partially heuristic
+    \item Opponent pool and mutation are implemented, but not yet exhaustively studied
+    \item The project did not finish with a clean large-scale ablation over all self-play variants
+    \item This is still closer to a strong prototype and research platform than to a polished benchmark paper
+\end{itemize}
+
+\textbf{Important tone}
+\begin{itemize}
+    \item This slide should sound honest but not apologetic
+    \item Emphasize that the key contribution is building and validating the platform, then exploring several nontrivial self-play design choices
+\end{itemize}
+
+\subsection*{Slide 20: Lessons Learned}
+
+\textbf{Suggested title:} Main Takeaways
+
+\textbf{Main points}
+\begin{itemize}
+    \item Multi-agent RL is as much a systems problem as an algorithm problem
+    \item Observation design strongly affects whether training can even begin to stabilize
+    \item Reward design is extremely sensitive in competitive environments
+    \item Symmetry and opponent diversity matter a lot
+    \item Visual debugging in Unity was genuinely useful, not just cosmetic
+\end{itemize}
+
+\textbf{Nice closing sentence}
+\begin{itemize}
+    \item The project ended up showing that even a very small arena can surface many of the same stability issues seen in much larger self-play systems
+\end{itemize}
+
+\subsection*{Slide 21: Closing / Demo Slide}
+
+\textbf{Suggested title:} Final Demo and Questions
+
+\textbf{Options}
+\begin{itemize}
+    \item End with a short live human-vs-policy demo
+    \item Or end with a short recorded clip if live demo is risky
+    \item Show the final Unity scene and briefly restate the project contributions
+\end{itemize}
+
+\textbf{Closing bullets}
+\begin{itemize}
+    \item Built a Unity-based competitive RL environment
+    \item Implemented end-to-end learning and evaluation pipeline
+    \item Explored multiple self-play stabilization mechanisms
+    \item Produced an interactive final demonstration
+\end{itemize}
+
+\section{Recommended Slide Compression If Time Is Short}
+
+If the presentation must be shorter, compress to roughly 12 slides using this mapping:
+
+\begin{enumerate}
+    \item Title
+    \item Motivation + related work
+    \item Environment/task
+    \item System architecture
+    \item Bridge and interface milestones
+    \item Imitation + PPO pipeline
+    \item Self-play evolution
+    \item Batch training + human-vs-policy
+    \item Reward design challenges
+    \item Main results
+    \item Limitations / lessons learned
+    \item Demo / questions
+\end{enumerate}
+
+\section{What to Emphasize During Presentation}
+
+\begin{itemize}
+    \item Do not oversell final policy strength.
+    \item Do emphasize how much engineering was required to turn the idea into a working system.
+    \item Use the development chronology as the main narrative.
+    \item Make Unity screenshots, bridge diagrams, and human-vs-policy visuals do real explanatory work.
+    \item When discussing results, separate clearly:
+    \begin{itemize}
+        \item what is fully implemented,
+        \item what was experimentally promising,
+        \item what remains incomplete.
+    \end{itemize}
+\end{itemize}
+
+\section{Suggested Assets to Prepare for the Actual Slides}
+
+\begin{itemize}
+    \item One clean arena screenshot
+    \item One architecture diagram
+    \item One bridge JSON or command flow illustration
+    \item One observation/action slide graphic
+    \item One screenshot of multi-arena batched training
+    \item One screenshot of human-vs-policy mode
+    \item One or two console/log screenshots showing PPO updates
+    \item One short GIF or video clip of the final demo
+\end{itemize}
+
+\section{Suggested Final Narrative in One Sentence}
+
+This project started as a study of self-play stability, and evolved into the construction of a full Unity--Python competitive RL system that supports environment design, self-play experimentation, batched training, and real-time human-vs-policy demonstration.
+
+\end{document}

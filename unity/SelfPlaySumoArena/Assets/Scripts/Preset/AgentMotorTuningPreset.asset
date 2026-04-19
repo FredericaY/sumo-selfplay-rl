@@ -12,10 +12,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1e868d9e049f9e145a613e5fc9aa4cee, type: 3}
   m_Name: AgentMotorTuningPreset
   m_EditorClassIdentifier: 
-  moveSpeed: 1.5
-  maxSpeed: 2.2
-  idleDrag: 5
-  pushImpulse: 2
-  pushCooldown: 1.5
+  moveSpeed: 1.7
+  maxSpeed: 2.8
+  moveDrag: 0.9
+  idleDrag: 2.6
+  pushImpulse: 3.4
+  pushCooldown: 2.4
+  pushRecoveryDrag: 3.2
+  pushRecoveryDuration: 0.45
+  maxPushSpeed: 5
   minInputMagnitude: 0.1
-  minPushSpeed: 0.15
+  minPushSpeed: 0.12
