@@ -45,8 +45,19 @@ class PPOVectorPolicy:
     def __init__(self, checkpoint_path: Path, policy_side: str = "b", device: str = "cpu") -> None:
         self.device = torch.device(device)
         self.policy_side = policy_side
-        self.network = ActorCritic(ActorCriticConfig(obs_dim=DEFAULT_OBS_DIM)).to(self.device)
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        config = checkpoint.get("config", {})
+        self.network = ActorCritic(
+            ActorCriticConfig(
+                obs_dim=DEFAULT_OBS_DIM,
+                use_edge_gate=bool(config.get("use_edge_gate", False)),
+                arena_radius=float(config.get("arena_radius", 5.0)),
+                edge_gate_margin=float(config.get("edge_gate_margin", 1.25)),
+                edge_gate_min_safety=float(config.get("edge_gate_min_safety", 0.15)),
+                edge_gate_push_penalty=float(config.get("edge_gate_push_penalty", 2.0)),
+                edge_gate_hidden_size=int(config.get("edge_gate_hidden_size", 16)),
+            )
+        ).to(self.device)
 
         if "policy_a_state_dict" in checkpoint and "policy_b_state_dict" in checkpoint:
             state_dict = checkpoint["policy_a_state_dict"] if policy_side == "a" else checkpoint["policy_b_state_dict"]
@@ -55,7 +66,7 @@ class PPOVectorPolicy:
         else:
             raise ValueError(f"Unsupported checkpoint format: {checkpoint_path}")
 
-        self.network.load_state_dict(state_dict)
+        self.network.load_state_dict(state_dict, strict=False)
         self.network.eval()
 
     def act(self, observation_vector: list[float]) -> list[float]:

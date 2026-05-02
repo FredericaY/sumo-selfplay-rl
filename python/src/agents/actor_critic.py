@@ -28,6 +28,12 @@ class ActorCriticConfig:
     obs_dim: int = DEFAULT_OBS_DIM
     hidden_sizes: Sequence[int] = (64, 64)
     init_std: float = 0.4
+    use_edge_gate: bool = False
+    arena_radius: float = 5.0
+    edge_gate_margin: float = 1.25
+    edge_gate_min_safety: float = 0.15
+    edge_gate_push_penalty: float = 2.0
+    edge_gate_hidden_size: int = 16
 
 
 class MLPBackbone(nn.Module if nn is not None else object):
@@ -69,13 +75,52 @@ class ActorCritic(nn.Module if nn is not None else object):
         self.push_logit_head = nn.Linear(self.backbone.output_dim, 1)
         self.value_head = nn.Linear(self.backbone.output_dim, 1)
         self.log_std = nn.Parameter(torch.full((2,), float(torch.log(torch.tensor(self.config.init_std)))))
+        if self.config.use_edge_gate:
+            self.edge_gate_head = nn.Sequential(
+                nn.Linear(4, int(self.config.edge_gate_hidden_size)),
+                nn.Tanh(),
+                nn.Linear(int(self.config.edge_gate_hidden_size), 1),
+            )
+            self._initialize_edge_gate_head()
 
     def forward(self, observations: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         features = self.backbone(observations)
         move_mean = torch.tanh(self.move_mean_head(features))
         push_logit = self.push_logit_head(features).squeeze(-1)
         values = self.value_head(features).squeeze(-1)
+        if self.config.use_edge_gate:
+            move_mean, push_logit = self._apply_edge_gate(observations, move_mean, push_logit)
         return move_mean, push_logit, values
+
+    def _initialize_edge_gate_head(self) -> None:
+        final_layer = self.edge_gate_head[-1]
+        nn.init.zeros_(final_layer.weight)
+        nn.init.constant_(final_layer.bias, 4.0)
+
+    def _apply_edge_gate(
+        self,
+        observations: torch.Tensor,
+        move_mean: torch.Tensor,
+        push_logit: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        edge_features = observations[:, [12, 13, 14, 15]]
+        learned_safety = torch.sigmoid(self.edge_gate_head(edge_features)).squeeze(-1)
+
+        self_pos = observations[:, 0:2]
+        self_edge_margin = observations[:, 13]
+        margin_scale = max(float(self.config.edge_gate_margin), 1e-6)
+        boundary_safety = torch.clamp(self_edge_margin / margin_scale, 0.0, 1.0)
+        min_safety = float(self.config.edge_gate_min_safety)
+        safety_gate = torch.clamp(boundary_safety * learned_safety, min=min_safety, max=1.0)
+
+        radial_dir = self_pos / torch.linalg.norm(self_pos, dim=-1, keepdim=True).clamp_min(1e-6)
+        outward_amount = torch.clamp(torch.sum(move_mean * radial_dir, dim=-1, keepdim=True), min=0.0)
+        outward_component = outward_amount * radial_dir
+        gated_move_mean = move_mean - (1.0 - safety_gate.unsqueeze(-1)) * outward_component
+
+        risk = 1.0 - safety_gate
+        gated_push_logit = push_logit - float(self.config.edge_gate_push_penalty) * risk
+        return gated_move_mean, gated_push_logit
 
     def sample_action(self, observations: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         move_mean, push_logit, values = self.forward(observations)

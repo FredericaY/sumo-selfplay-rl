@@ -54,6 +54,11 @@ class PPOTrainConfig:
     canonicalize_left_right: bool = True
     opponent_position_scale: float = 1.5
     relative_position_scale: float = 2.0
+    use_edge_gate: bool = False
+    edge_gate_margin: float = 1.25
+    edge_gate_min_safety: float = 0.15
+    edge_gate_push_penalty: float = 2.0
+    edge_gate_hidden_size: int = 16
     opponent_policy: str = "flee"
     train_mode: str = "single_agent_baseline"
     train_side: str = "a"
@@ -139,11 +144,13 @@ class PPOTrainer:
         self.opponent = self._build_opponent(self.config.opponent_policy)
         self.update_offset = 0
 
-        self.policy = ActorCritic(ActorCriticConfig(obs_dim=DEFAULT_OBS_DIM)).to(self.device)
+        actor_critic_config = self._build_actor_critic_config(arena_radius=arena_radius)
+
+        self.policy = ActorCritic(actor_critic_config).to(self.device)
         self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=self.config.learning_rate)
 
-        self.policy_a = ActorCritic(ActorCriticConfig(obs_dim=DEFAULT_OBS_DIM)).to(self.device)
-        self.policy_b = ActorCritic(ActorCriticConfig(obs_dim=DEFAULT_OBS_DIM)).to(self.device)
+        self.policy_a = ActorCritic(actor_critic_config).to(self.device)
+        self.policy_b = ActorCritic(actor_critic_config).to(self.device)
         self.optimizer_a = torch.optim.Adam(self.policy_a.parameters(), lr=self.config.learning_rate)
         self.optimizer_b = torch.optim.Adam(self.policy_b.parameters(), lr=self.config.learning_rate)
 
@@ -601,23 +608,38 @@ class PPOTrainer:
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
 
         if "policy_a_state_dict" in checkpoint and "policy_b_state_dict" in checkpoint:
-            self.policy_a.load_state_dict(checkpoint["policy_a_state_dict"])
-            self.policy_b.load_state_dict(checkpoint["policy_b_state_dict"])
+            self._load_policy_state(self.policy_a, checkpoint["policy_a_state_dict"])
+            self._load_policy_state(self.policy_b, checkpoint["policy_b_state_dict"])
             if load_optimizer_state:
                 if checkpoint.get("optimizer_a_state") is not None:
                     self.optimizer_a.load_state_dict(checkpoint["optimizer_a_state"])
                 if checkpoint.get("optimizer_b_state") is not None:
                     self.optimizer_b.load_state_dict(checkpoint["optimizer_b_state"])
         elif "state_dict" in checkpoint:
-            self.policy.load_state_dict(checkpoint["state_dict"])
-            self.policy_a.load_state_dict(checkpoint["state_dict"])
-            self.policy_b.load_state_dict(checkpoint["state_dict"])
+            self._load_policy_state(self.policy, checkpoint["state_dict"])
+            self._load_policy_state(self.policy_a, checkpoint["state_dict"])
+            self._load_policy_state(self.policy_b, checkpoint["state_dict"])
             if load_optimizer_state and checkpoint.get("optimizer_state") is not None:
                 self.optimizer.load_state_dict(checkpoint["optimizer_state"])
         else:
             raise ValueError(f"Unsupported checkpoint format: {checkpoint_path}")
 
         return checkpoint
+
+    def _build_actor_critic_config(self, arena_radius: float) -> ActorCriticConfig:
+        return ActorCriticConfig(
+            obs_dim=DEFAULT_OBS_DIM,
+            use_edge_gate=self.config.use_edge_gate,
+            arena_radius=arena_radius,
+            edge_gate_margin=self.config.edge_gate_margin,
+            edge_gate_min_safety=self.config.edge_gate_min_safety,
+            edge_gate_push_penalty=self.config.edge_gate_push_penalty,
+            edge_gate_hidden_size=self.config.edge_gate_hidden_size,
+        )
+
+    @staticmethod
+    def _load_policy_state(policy: ActorCritic, state_dict: dict[str, Any]) -> None:
+        policy.load_state_dict(state_dict, strict=False)
 
     def _sample_with_policy(
         self,

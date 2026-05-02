@@ -95,6 +95,7 @@ Current self-play features:
 - opponent pool sampling from historical checkpoints
 - periodic mutation of one training side
 - optional EMA propagation between A and B
+- optional Edge-Gated Actor-Critic for boundary-aware action modulation
 - left-right observation canonicalization
 - opponent/relative-position feature scaling
 - time-scaled terminal loss penalties
@@ -200,6 +201,10 @@ The most frequently adjusted fields are:
 - `training.learning_rate`
 - `training.entropy_coef`
 - `training.finish_active_episodes_before_exit`
+- `training.use_edge_gate`
+- `training.edge_gate_margin`
+- `training.edge_gate_min_safety`
+- `training.edge_gate_push_penalty`
 - `training.mutation_enabled`
 - `training.mutation_every_segments`
 - `training.mutation_std`
@@ -218,6 +223,18 @@ The current PPO path is not a single shared policy anymore. It uses alternating 
 - optional EMA can softly propagate weights from the newly trained side into the opposite side
 - optional mutation can perturb the side about to train every `mutation_every_segments`
 - optional opponent-pool sampling can replace the frozen opponent side with a historical checkpoint sample
+
+### Edge-Gated Actor-Critic experiment
+
+The PPO actor-critic can optionally enable a boundary-aware gate:
+
+- `training.use_edge_gate=true`
+- self edge-margin features generate a safety gate
+- near the boundary, outward movement components are damped
+- near the boundary, push logits are penalized to reduce self ring-outs
+- inward movement remains available, so the policy can recover toward the center
+
+This is intended as a lightweight structural ablation against the plain MLP actor-critic.
 
 ## Main Workflow 2: Human vs Policy
 

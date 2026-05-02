@@ -37,6 +37,11 @@ training:
   init_checkpoint:
   load_optimizer_state: false
   finish_active_episodes_before_exit: true
+  use_edge_gate: false
+  edge_gate_margin: 1.25
+  edge_gate_min_safety: 0.15
+  edge_gate_push_penalty: 2.0
+  edge_gate_hidden_size: 16
   mutation_enabled: false
   mutation_every_segments: 4
   mutation_std: 0.01

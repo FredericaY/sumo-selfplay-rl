@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<evaluation_protocol
+    project="DeepRL Self-Play Arena"
+    topic="PPO stabilization and Edge-Gated Actor-Critic ablation"
+    data_status="protocol_template_not_measured_results">
+
+  <integrity_note>
+    This file is an evaluation protocol and report-planning template. Numeric result
+    fields are intentionally left blank until measured from actual runs. Do not present
+    this file as completed experimental evidence without replacing placeholders with
+    real measurements.
+  </integrity_note>
+
+  <research_question>
+    Can lightweight self-play stabilization methods and a boundary-aware actor
+    architecture reduce brittle behavior in a Unity-based sumo self-play environment?
+  </research_question>
+
+  <methods>
+    <method id="plain_ppo" name="Plain PPO">
+      <description>Standard actor-critic PPO without two-policy alternation, opponent pool, mutation, EMA, or EGAC.</description>
+      <purpose>Baseline for measuring the difficulty of the Unity arena task.</purpose>
+    </method>
+
+    <method id="alternating_shaped" name="Alternating PPO + Reward/Observation Shaping">
+      <description>Two-policy alternating self-play with 17-dimensional observations, edge-aware reward shaping, and left-right canonicalization.</description>
+      <purpose>Measures the effect of the core self-play training setup.</purpose>
+    </method>
+
+    <method id="selfplay_enhanced" name="Enhanced Self-Play">
+      <description>Alternating self-play with opponent-pool sampling, Gaussian checkpoint mutation, and EMA propagation.</description>
+      <purpose>Measures whether diversity and softer A/B policy transfer improve robustness.</purpose>
+    </method>
+
+    <method id="egac" name="Enhanced Self-Play + EGAC">
+      <description>Enhanced self-play plus Edge-Gated Actor-Critic. The edge gate uses boundary features to damp outward movement and reduce push probability near the ring boundary.</description>
+      <purpose>Tests the project-specific structural contribution for reducing boundary-risk failures.</purpose>
+    </method>
+  </methods>
+
+  <metrics>
+    <metric id="mean_return" unit="reward_per_episode">
+      <definition>Average undiscounted episodic return over evaluation episodes.</definition>
+      <interpretation>Higher is generally better, but should be read together with win rate and timeout rate.</interpretation>
+    </metric>
+
+    <metric id="win_rate_vs_heuristic" unit="fraction">
+      <definition>Fraction of evaluation episodes won against scripted heuristic opponents.</definition>
+      <interpretation>Measures basic policy competence outside latest-vs-latest self-play.</interpretation>
+    </metric>
+
+    <metric id="win_rate_vs_historical" unit="fraction">
+      <definition>Fraction of evaluation episodes won against earlier saved checkpoints.</definition>
+      <interpretation>Measures robustness against a broader opponent distribution.</interpretation>
+    </metric>
+
+    <metric id="self_ring_out_rate" unit="fraction">
+      <definition>Fraction of episodes lost by the evaluated agent leaving the arena boundary.</definition>
+      <interpretation>Primary safety metric for EGAC. Lower is better.</interpretation>
+    </metric>
+
+    <metric id="near_edge_push_rate" unit="fraction">
+      <definition>Fraction of push actions triggered while the agent edge margin is below the chosen near-edge threshold.</definition>
+      <interpretation>Diagnostic metric for whether EGAC reduces high-risk push behavior near the boundary.</interpretation>
+    </metric>
+
+    <metric id="timeout_rate" unit="fraction">
+      <definition>Fraction of episodes ending by time limit.</definition>
+      <interpretation>Checks whether safety improvements come from excessive passivity.</interpretation>
+    </metric>
+
+    <metric id="mean_episode_length" unit="environment_steps">
+      <definition>Average number of environment steps before terminal state.</definition>
+      <interpretation>Used to distinguish immediate failures, stable engagement, and passive stalling.</interpretation>
+    </metric>
+  </metrics>
+
+  <recommended_evaluation>
+    <episodes_per_condition>20</episodes_per_condition>
+    <opponents>
+      <opponent id="heuristic_chase"/>
+      <opponent id="heuristic_flee"/>
+      <opponent id="random"/>
+      <opponent id="historical_early_checkpoint"/>
+      <opponent id="historical_mid_checkpoint"/>
+      <opponent id="historical_late_checkpoint"/>
+    </opponents>
+    <near_edge_threshold>1.25</near_edge_threshold>
+    <notes>
+      If time is limited, prioritize self_ring_out_rate, win_rate_vs_heuristic,
+      timeout_rate, and one qualitative Unity video comparison.
+    </notes>
+  </recommended_evaluation>
+
+  <results_template>
+    <result method_id="plain_ppo">
+      <mean_return measured="false"></mean_return>
+      <win_rate_vs_heuristic measured="false"></win_rate_vs_heuristic>
+      <win_rate_vs_historical measured="false"></win_rate_vs_historical>
+      <self_ring_out_rate measured="false"></self_ring_out_rate>
+      <near_edge_push_rate measured="false"></near_edge_push_rate>
+      <timeout_rate measured="false"></timeout_rate>
+      <mean_episode_length measured="false"></mean_episode_length>
+      <qualitative_observation measured="false">Expected failure mode to check: unstable movement, overuse of push, and frequent accidental ring-outs.</qualitative_observation>
+    </result>
+
+    <result method_id="alternating_shaped">
+      <mean_return measured="false"></mean_return>
+      <win_rate_vs_heuristic measured="false"></win_rate_vs_heuristic>
+      <win_rate_vs_historical measured="false"></win_rate_vs_historical>
+      <self_ring_out_rate measured="false"></self_ring_out_rate>
+      <near_edge_push_rate measured="false"></near_edge_push_rate>
+      <timeout_rate measured="false"></timeout_rate>
+      <mean_episode_length measured="false"></mean_episode_length>
+      <qualitative_observation measured="false">Expected trend to check: more stable than plain PPO, but still vulnerable near the boundary.</qualitative_observation>
+    </result>
+
+    <result method_id="selfplay_enhanced">
+      <mean_return measured="false"></mean_return>
+      <win_rate_vs_heuristic measured="false"></win_rate_vs_heuristic>
+      <win_rate_vs_historical measured="false"></win_rate_vs_historical>
+      <self_ring_out_rate measured="false"></self_ring_out_rate>
+      <near_edge_push_rate measured="false"></near_edge_push_rate>
+      <timeout_rate measured="false"></timeout_rate>
+      <mean_episode_length measured="false"></mean_episode_length>
+      <qualitative_observation measured="false">Expected trend to check: better opponent robustness from pool sampling and mutation, with possible remaining boundary-risk mistakes.</qualitative_observation>
+    </result>
+
+    <result method_id="egac">
+      <mean_return measured="false"></mean_return>
+      <win_rate_vs_heuristic measured="false"></win_rate_vs_heuristic>
+      <win_rate_vs_historical measured="false"></win_rate_vs_historical>
+      <self_ring_out_rate measured="false"></self_ring_out_rate>
+      <near_edge_push_rate measured="false"></near_edge_push_rate>
+      <timeout_rate measured="false"></timeout_rate>
+      <mean_episode_length measured="false"></mean_episode_length>
+      <qualitative_observation measured="false">Expected trend to check: fewer self ring-outs and fewer near-edge pushes, while preserving center-area engagement.</qualitative_observation>
+    </result>
+  </results_template>
+
+  <report_language_template>
+    <safe_claim>
+      We implemented the EGAC mechanism and designed an ablation protocol comparing
+      plain PPO, alternating self-play, enhanced self-play, and EGAC. Due to time
+      constraints, the final report emphasizes implementation, qualitative behavior,
+      and the planned evaluation metrics rather than claiming exhaustive benchmark results.
+    </safe_claim>
+    <claim_after_measurement>
+      Replace this text only after running evaluation: EGAC changed self-ring-out rate
+      from [baseline_value] to [egac_value] over [n] episodes, suggesting that the
+      boundary-aware gate reduced high-risk actions near the arena edge.
+    </claim_after_measurement>
+  </report_language_template>
+</evaluation_protocol>
