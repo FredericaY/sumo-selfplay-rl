@@ -17,7 +17,7 @@ The repo intentionally keeps the gameplay simple so the main project focus stays
 
 ## Project Status
 
-The project has passed the initial integration milestone.
+The project has passed the integration milestone and is now in final-report / demonstration form.
 
 Implemented and verified:
 
@@ -36,27 +36,41 @@ Implemented and verified:
 - Opponent-pool sampling for alternating self-play
 - Periodic policy mutation for added diversity
 - EMA propagation between policy A and B
+- Edge-Gated Actor-Critic (EGAC) as an optional boundary-aware actor architecture
 - Time-scaled loss penalties and timeout center-bias rewards
 - Human-vs-policy realtime demo mode
+- NeurIPS-style final report draft and figure assets in `docs/final`
 
 This means the current codebase already supports:
 
 - collecting trajectories from Unity
 - training a small neural policy in Python
 - evaluating checkpoints back inside the Unity environment
-- running alternating self-play experiments with reward shaping, pool sampling, and mutation
+- running alternating self-play experiments with reward shaping, pool sampling, mutation, EMA, and EGAC
 
-## Why Self-Play
+The repository should be read as a course-project research prototype rather than a polished benchmark suite. The codebase contains the working system and experiment scaffolding; large-scale multi-seed ablations and final trained policy artifacts are not checked in.
+
+## Project Figures
+
+The report figures in `docs/pics` summarize the current system and methods.
+
+![System overview](docs/pics/fig_system_overview.png)
+
+![Training extensions](docs/pics/fig_training_pipeline_extensions.png)
+
+![EGAC architecture](docs/pics/fig_egac_architecture.png)
+
+![Ablation design](docs/pics/fig_ablation_design.png)
+
+![Qualitative behavior comparison](docs/pics/fig_behavior_comparison.png)
+
+## Motivation
 
 Self-play is a natural fit for a symmetric 1v1 arena:
 
 - it removes the need for a strong hand-authored opponent
 - it lets the policy improve against increasingly strong versions of itself
 - it exposes stability issues that are central to multi-agent RL
-
-The current plan is to start from a shared-parameter self-play baseline and then extend toward stronger experiment variants if time allows.
-
-## Why Unity
 
 Unity is used for the environment presentation and final demo side:
 
@@ -65,6 +79,19 @@ Unity is used for the environment presentation and final demo side:
 - straightforward path from RL environment to playable demo
 
 Python is used for training so experimentation stays lightweight and easy to extend.
+
+The main research question became:
+
+> How can a small PPO self-play agent be made less brittle in a physical ring-out environment where boundary mistakes and opponent overfitting are common?
+
+The current answer is a stack of lightweight PPO extensions:
+
+- alternating two-policy self-play
+- opponent-pool sampling
+- Gaussian policy mutation
+- EMA propagation
+- reward and observation shaping
+- Edge-Gated Actor-Critic (EGAC)
 
 ## Current Training Stack
 
@@ -75,11 +102,16 @@ The current training-side workflow is:
 3. `UnitySelfPlayArenaEnv` exposes a training-friendly interface
 4. Policies consume observation vectors and output action vectors
 5. Rollouts can be collected, saved, trained on, and evaluated
-6. PPO supports alternating two-policy self-play, opponent-pool sampling, mutation, and optional EMA propagation
+6. PPO supports alternating two-policy self-play, opponent-pool sampling, mutation, optional EMA propagation, and optional EGAC
 
 Current observation vector size:
 
 - `17`
+- self position / velocity
+- opponent position / velocity
+- relative position / velocity
+- self and opponent edge features
+- push-ready flag
 
 Current action vector size:
 
@@ -100,6 +132,62 @@ Current self-play features:
 - opponent/relative-position feature scaling
 - time-scaled terminal loss penalties
 - timeout center-bias penalties
+
+## Method Summary
+
+### Plain PPO baseline
+
+The baseline policy is a small actor-critic MLP. It predicts:
+
+- a Gaussian movement action for `move_x` and `move_y`
+- a Bernoulli push decision through a push logit
+- a scalar value estimate
+
+PPO uses clipped policy updates, value loss, entropy regularization, and GAE-style returns.
+
+### Alternating two-policy self-play
+
+The current self-play path maintains two policies:
+
+- `policy_a`
+- `policy_b`
+
+One side trains while the other side is frozen. The training side then switches. This avoids changing both agents at once and gives each PPO segment a more stable opponent.
+
+### Opponent pool
+
+When enabled, the frozen opponent side can be sampled from a pool of historical checkpoints. This reduces overfitting to only the latest opponent and supports evaluation against older strategies.
+
+### Gaussian policy mutation
+
+Checkpoint mutation perturbs one side's policy parameters with small Gaussian noise:
+
+```text
+theta' = theta + sigma * epsilon
+```
+
+This is intended to introduce local diversity and help alternating self-play escape narrow conventions.
+
+### EMA propagation
+
+After a training segment, the newly trained side can be softly propagated into the opposite side:
+
+```text
+target = decay * target + (1 - decay) * source
+```
+
+This keeps A/B policies related without directly copying one side over the other.
+
+### Edge-Gated Actor-Critic
+
+EGAC is the project-specific structural extension. It uses boundary features to compute a safety gate:
+
+- far from boundary: actor behaves like the normal PPO actor
+- near boundary: outward movement is damped
+- near boundary: push logits are penalized
+- inward recovery movement remains available
+
+This targets a common failure mode in the arena: self ring-out caused by aggressive movement or push near the edge.
 
 ## Quick Start
 
@@ -236,6 +324,23 @@ The PPO actor-critic can optionally enable a boundary-aware gate:
 
 This is intended as a lightweight structural ablation against the plain MLP actor-critic.
 
+Suggested EGAC run:
+
+```yaml
+training:
+  use_edge_gate: true
+  edge_gate_margin: 1.25
+  edge_gate_min_safety: 0.15
+  edge_gate_push_penalty: 2.0
+  edge_gate_hidden_size: 16
+```
+
+Then train as usual:
+
+```powershell
+python python/scripts/train_selfplay.py --config python/configs/train.yaml --alternating-cycles 2
+```
+
 ## Main Workflow 2: Human vs Policy
 
 This is the main demo / presentation path: you control `agent_0` in Unity and Python drives `agent_1` from a checkpoint.
@@ -316,6 +421,46 @@ python python/scripts/train_imitation.py --epochs 20 --batch-size 64 --lr 1e-3
 python python/scripts/eval_checkpoint.py python/checkpoints/imitation/<checkpoint>.pt --episodes 10 --opponent-policy flee
 ```
 
+## Evaluation Plan
+
+The current final-report evaluation plan is documented in:
+
+- `docs/egac_evaluation_protocol.xml`
+
+The intended ablation groups are:
+
+| Method | Alternating | Pool | Mutation | EMA | EGAC |
+|---|---:|---:|---:|---:|---:|
+| Plain PPO | no | no | no | no | no |
+| Alternating Self-Play | yes | no | no | no | no |
+| Enhanced Self-Play | yes | yes | yes | yes | no |
+| EGAC | yes | yes | yes | yes | yes |
+
+Recommended metrics:
+
+- win rate vs heuristic opponents
+- win rate vs historical checkpoints
+- self ring-out rate
+- near-edge push rate
+- timeout rate
+- mean episode length
+
+The final report focuses on implementation, method design, qualitative behavior, and the ablation protocol. Large-scale completed numerical ablations are not included in the repository.
+
+## Final Report Assets
+
+The Overleaf-ready report package is in:
+
+- `docs/final/`
+
+Important files:
+
+- `docs/final/DRP_final_report.tex`
+- `docs/final/references.bib`
+- `docs/final/neurips_2026.sty`
+- copied report figures from `docs/pics`
+- compiled PDF, when present: `docs/final/CSE5100_FinalReport.pdf`
+
 ## Repository Structure
 
 ```text
@@ -323,7 +468,10 @@ sumo-selfplay-rl/
 |-- README.md
 |-- docs/
 |   |-- DeepRL_final_proposal.pdf
-|   `-- design/
+|   |-- design/
+|   |-- pics/
+|   |-- final/
+|   `-- egac_evaluation_protocol.xml
 |-- unity/
 |   |-- README.md
 |   |-- project_structure.md
@@ -360,25 +508,28 @@ Key Python modules:
 - `python/src/envs/action_adapter.py`
 - `python/src/agents/policy.py`
 - `python/src/agents/actor_critic.py`
+- `python/src/algorithms/ppo_buffer.py`
 - `python/src/algorithms/rollout_collector.py`
 - `python/src/algorithms/ppo_trainer.py`
+- `python/src/train.py`
 - `python/src/eval/evaluate.py`
 
 ## Current Limitations
 
 - The PPO implementation is still an early experiment framework rather than a polished benchmark suite
-- Self-play now includes opponent-pool sampling and mutation, but not a full league / population training system
+- Self-play now includes opponent-pool sampling and mutation, but not a full league / PSRO-style population training system
 - Reward shaping and reward attribution are still under active iteration
 - Learned policies can still be brittle against humans despite the richer training setup
-- Unity presentation polish is still behind the core training/debugging functionality
+- EGAC is implemented as an architectural ablation, but it still needs full multi-seed quantitative evaluation
+- Training checkpoints, logs, and videos are intentionally not heavily versioned in this repository
 
 ## Next Milestones
 
-- stabilize alternating two-policy PPO training
-- improve reward design, timeout handling, and symmetry robustness
-- compare trained checkpoints against stronger baselines and human play
-- refine pool / mutation / EMA settings with cleaner ablations
-- finalize a stronger policy for the Unity demo flow
+- run the planned ablation over multiple seeds
+- add automated logging for self ring-out rate and near-edge push rate
+- compare EGAC against an explicit action-shield baseline
+- refine pool / mutation / EMA settings with cleaner experiment tracking
+- export or embed a stronger policy for the Unity demo flow
 
 ## Author
 
